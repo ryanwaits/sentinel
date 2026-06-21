@@ -1,0 +1,16 @@
+node_modules/
+.output/
+.env.local
+.env
+*.log
+
+# simnet runtime artifacts
+simnet/.cache/
+simnet/deployments/
+simnet/history.json
+
+# eve
+.eve/
+
+# eve durable runtime state
+.workflow-data/

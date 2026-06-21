@@ -1,0 +1,28 @@
+{
+  "name": "audit-sentinel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Continuous Stacks asset-safety audit pipeline — a separate project powered by secondlayer (public SDK + hosted Index/Subgraphs/Streams/Subscriptions).",
+  "scripts": {
+    "poc:finding-1": "bun run simnet/poc/finding-1.ts",
+    "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
+    "sandbox:run": "docker run --rm --network none audit-sentinel-simnet:local",
+    "dev": "eve dev",
+    "webhook": "bun run webhooks/secondlayer-webhook.ts"
+  },
+  "dependencies": {
+    "@secondlayer/sdk": "^6.25.1",
+    "@secondlayer/stacks": "^2.5.2",
+    "@secondlayer/subgraphs": "^3.16.0",
+    "@stacks/clarinet-sdk": "^3.20.0",
+    "eve": "^0.12.0",
+    "zod": "^4.4.3"
+  },
+  "overrides": {
+    "ai": "7.0.0-beta.178"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,9 @@
+[project]
+name = "audit-sentinel-poc"
+description = "Simnet PoC harness for secondlayer vault audits"
+authors = []
+telemetry = false
+requirements = []
+
+# Contracts are deployed programmatically by the PoC runner via
+# simnet.deployContract(...), so no [contracts.*] entries are needed here.

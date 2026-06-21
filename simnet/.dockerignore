@@ -1,0 +1,6 @@
+node_modules
+.cache
+deployments
+history.json
+package.json
+*.log

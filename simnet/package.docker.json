@@ -1,0 +1,9 @@
+{
+  "name": "audit-sentinel-simnet",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@stacks/clarinet-sdk": "^3.20.0",
+    "@secondlayer/stacks": "^2.5.2"
+  }
+}
