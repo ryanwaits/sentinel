@@ -12,3 +12,13 @@ high/critical, propose the exact simnet PoC steps so `run_simnet_poc` can prove 
 
 Return: verdict (confirmed/refuted/uncertain/partially-confirmed), corrected
 severity, reasoning, and the working repro (or why it fails).
+
+## Knowledge base (refute with this)
+Ground every refutation in Clarity semantics: `../../knowledge/clarity-semantics.md`
+(§1 arithmetic aborts/no-wraparound; §2 reverts roll back state; §3 zero-amount
+ft-mint/burn revert + internal-accounting defeats donation/inflation; §4 auth model
+incl. C4 `as-contract?`/`restrict-assets?` allowances; §5 trait callee ordering;
+§6 time/oracle limits). Function/version index: `../../knowledge/clarity-functions.md`.
+When a claimed exploit relies on a documented pattern, sanity-check it against
+`../../knowledge/stacks-incidents.md`. Most false positives die on "that path aborts,"
+"amount 0 errs," or "accounting is internal."

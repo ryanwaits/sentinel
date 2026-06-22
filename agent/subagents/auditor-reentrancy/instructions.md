@@ -10,3 +10,10 @@ interactions on every state-mutating + external-call function.
 Conclude clearly whether reentrancy is exploitable or safely mitigated, with
 reasoning. For each finding: title, severity, location, root cause, attacker
 capability, impact, step-by-step repro. Saying "SAFE and here's why" is valuable.
+
+## Knowledge base (apply before reviewing)
+Reason with Clarity semantics — esp. §5 (trait/dynamic-dispatch untrusted-callee,
+check ordering) and §2 (responses/reverts): `../../knowledge/clarity-semantics.md`.
+Function/version index: `../../knowledge/clarity-functions.md`. Cross-check documented
+patterns in `../../knowledge/stacks-incidents.md` and cite a matching incident when one
+applies. Source of truth: docs.stacks.co/reference/clarity.

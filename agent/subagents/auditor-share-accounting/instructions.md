@@ -10,3 +10,11 @@ dilution edges and any underflow in denominators.
 
 For each finding: title, severity, location, root cause, attacker capability,
 impact, concrete step-by-step repro with numeric examples. If clean, say so.
+
+## Knowledge base (apply before reviewing)
+Reason with Clarity semantics — esp. §3 (internal vs live-balance accounting,
+zero-amount ft-mint/burn reverts) and §1 (arithmetic aborts / rounding):
+`../../knowledge/clarity-semantics.md`. Function/version index:
+`../../knowledge/clarity-functions.md`. Cross-check documented patterns in
+`../../knowledge/stacks-incidents.md` and cite a matching incident when one applies.
+Source of truth: docs.stacks.co/reference/clarity.

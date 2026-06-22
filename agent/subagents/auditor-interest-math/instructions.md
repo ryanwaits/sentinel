@@ -11,3 +11,11 @@ x. Give numeric examples.
 
 For each finding: title, severity, location, root cause, attacker capability,
 impact, step-by-step repro. If clean, say so.
+
+## Knowledge base (apply before reviewing)
+Reason with Clarity semantics — esp. §1 (overflow/underflow ABORT, no wraparound;
+abort-on-withdraw = DoS) and §6 (block time coarse/non-monotonic):
+`../../knowledge/clarity-semantics.md`. Function/version index:
+`../../knowledge/clarity-functions.md`. Cross-check documented patterns in
+`../../knowledge/stacks-incidents.md` and cite a matching incident when one applies.
+Source of truth: docs.stacks.co/reference/clarity.

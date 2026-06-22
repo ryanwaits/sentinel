@@ -20,3 +20,9 @@ Rules:
 - Never run an exploit against mainnet. PoCs run only in the sandboxed Clarity VM.
 - Prefer the internal `@secondlayer/stacks` SDK and secondlayer Index/Subgraphs
   for all on-chain data — never swap in third-party APIs without being asked.
+
+Knowledge base (`agent/knowledge/`): `clarity-semantics.md` (asset-safety semantics),
+`clarity-functions.md` (built-in index + versions), `clarity-keywords-types.md`, and
+`stacks-incidents.md` (documented Stacks hacks → audit-dimension → detection
+heuristic). Subagents apply these; when a finding matches a documented incident
+pattern, cite it. Keep the knowledge current per `docs/staying-current.md`.
