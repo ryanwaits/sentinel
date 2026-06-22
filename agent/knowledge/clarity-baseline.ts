@@ -1,0 +1,69 @@
+/**
+ * Machine-readable Clarity baseline for the drift check (check_clarity_drift).
+ * name -> introduced Clarity version. KEEP IN SYNC with clarity-functions.md /
+ * clarity-keywords-types.md when docs.stacks.co changes (see docs/staying-current.md).
+ * Deprecations/removals/disables live in the .md docs; this map tracks existence +
+ * introduced-version so the drift tool can flag NEW or VERSION-CHANGED built-ins.
+ */
+export const KNOWN_FUNCTIONS: Record<string, number> = {
+  // arithmetic / bitwise
+  "*": 1, "+": 1, "-": 1, "/": 1, mod: 1, pow: 1, log2: 1, sqrti: 1,
+  "to-int": 1, "to-uint": 1,
+  "bit-and": 2, "bit-or": 2, "bit-xor": 2, "bit-not": 2,
+  "bit-shift-left": 2, "bit-shift-right": 2, xor: 1,
+  // comparison / logic
+  "<": 1, "<=": 1, ">": 1, ">=": 1, "is-eq": 1, and: 1, or: 1, not: 1,
+  // sequences
+  append: 1, concat: 1, len: 1, list: 1, "as-max-len?": 1,
+  "element-at?": 2, "element-at": 1, "index-of?": 2, "index-of": 1,
+  "slice?": 2, "replace-at?": 2, filter: 1, fold: 1, map: 1, "to-ascii?": 4,
+  // options / responses / control flow
+  ok: 1, err: 1, some: 1, "is-ok": 1, "is-err": 1, "is-none": 1, "is-some": 1,
+  "default-to": 1, match: 1, "try!": 1, "unwrap!": 1, "unwrap-err!": 1,
+  "unwrap-panic": 1, "unwrap-err-panic": 1, "asserts!": 1, if: 1, begin: 1, let: 1,
+  // tuples / maps / vars / definitions
+  tuple: 1, get: 1, merge: 1, "map-get?": 1, "map-set": 1, "map-insert": 1,
+  "map-delete": 1, "var-get": 1, "var-set": 1, "define-constant": 1,
+  "define-data-var": 1, "define-map": 1,
+  // fungible tokens
+  "define-fungible-token": 1, "ft-mint?": 1, "ft-burn?": 1, "ft-transfer?": 1,
+  "ft-get-balance": 1, "ft-get-supply": 1,
+  // non-fungible tokens
+  "define-non-fungible-token": 1, "nft-mint?": 1, "nft-burn?": 1,
+  "nft-transfer?": 1, "nft-get-owner?": 1,
+  // STX
+  "stx-transfer?": 1, "stx-burn?": 1, "stx-get-balance": 1,
+  "stx-transfer-memo?": 2, "stx-account": 2,
+  // auth / contract context (Clarity 4 asset-safety surface)
+  "as-contract": 1, "as-contract?": 4, "restrict-assets?": 4, "with-stx": 4,
+  "with-ft": 4, "with-nft": 4, "with-stacking": 4, "with-all-assets-unsafe": 4,
+  "contract-call?": 1, "contract-of": 1, "contract-hash?": 4,
+  // principals
+  "principal-of?": 1, "principal-construct?": 2, "principal-destruct?": 2,
+  "is-standard": 2,
+  // crypto
+  hash160: 1, keccak256: 1, sha256: 1, sha512: 1, "sha512/256": 1,
+  "secp256k1-recover?": 1, "secp256k1-verify": 1, "secp256r1-verify": 4,
+  // block / tenure
+  "get-stacks-block-info?": 3, "get-tenure-info?": 3, "get-burn-block-info?": 2,
+  "get-block-info?": 1, "at-block": 1,
+  // conversions / serialization
+  "int-to-ascii": 2, "int-to-utf8": 2, "string-to-int?": 2, "string-to-uint?": 2,
+  "buff-to-int-be": 2, "buff-to-int-le": 2, "buff-to-uint-be": 2, "buff-to-uint-le": 2,
+  "to-consensus-buff?": 2, "from-consensus-buff?": 2, print: 1,
+  // definitions / traits
+  "define-public": 1, "define-private": 1, "define-read-only": 1,
+  "define-trait": 1, "impl-trait": 1, "use-trait": 1,
+};
+
+export const KNOWN_KEYWORDS: Record<string, number> = {
+  "block-height": 1, "burn-block-height": 1, "chain-id": 2, "contract-caller": 1,
+  "current-contract": 4, false: 1, "is-in-mainnet": 2, "is-in-regtest": 1, none: 1,
+  "stacks-block-height": 3, "stacks-block-time": 4, "stx-liquid-supply": 1,
+  "tenure-height": 3, true: 1, "tx-sender": 1, "tx-sponsor?": 2,
+};
+
+export const KNOWN_TYPES: string[] = [
+  "int", "uint", "bool", "principal", "response", "optional",
+  "buff", "string-ascii", "string-utf8", "list", "tuple",
+];
