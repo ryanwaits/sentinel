@@ -69,19 +69,30 @@ privileged fns, at any call depth," which (a) enhances/over-lays explorers with 
 visibility owners wanted, and (b) is the trigger source for the monitor gate →
 auditor evaluation.
 
-**To build / verify:**
-1. **Confirm nesting depth:** does the secondlayer `contract_call` subgraph source
-   capture NESTED inner calls, or only top-level entry points? (Source type is
-   `contract_call` with `sender`/`contractId`/`functionName`/`args` — verify whether
-   `contractId` is the entry point only or each touched contract.) This is the make-or-
-   break question. If top-level only, use Streams/Index decoded receipts instead.
-2. **`contract-call-watch` subgraph:** index calls to a watchlist of protected
-   contracts + privileged fn names (`execute-proposal`, `socialize-debt`,
-   `set-approved-*`, `set-impl`, mint/transfer), keyed (target, fn, caller, depth).
-3. **Monitor gate:** alert when an unrecognized / newly-deployed contract invokes a
-   privileged fn on a protected contract → hand the interaction to the
-   governance/access-control auditors for live adjudication (event-driven triage, not
-   "audit this contract"). Wire via `webhooks/secondlayer-webhook.ts` (exists, not wired).
+**Nesting-depth finding (checked the installed types):** the subgraph `contract_call`
+source's `ContractCallEvent` is **top-level only** — fields are `sender` ("the
+principal who signed the tx"), `contractId`, `functionName`, `args`, `result`; there
+is NO immediate-caller or call-depth field. So a `contract_call` subgraph alone has
+the SAME blind spot as explorers (it sees the entry-point call, not the inner call to
+victim). Two ways around it:
+- **Effect-based (works today):** the DRAIN itself — value leaving victim — surfaces
+  as `ft/nft/stx` asset events with victim as `sender` **at any call depth**, because
+  asset events are emitted regardless of which contract triggered the move. Our
+  `asset-holdings` subgraph already indexes exactly this. So "unexpected outflow from a
+  protected contract" is detectable now, even when the triggering contract is hidden.
+- **Call-attribution (needs verification):** to name the malicious *caller* (not just
+  the effect), check whether the decoded **Index / Streams** expose the execution call
+  tree or `contract_log`/print events that identify the inner call. The subgraph source
+  doesn't; the Index API might. Verify before promising "see who called you."
+
+**To build:**
+1. **`contract-call-watch` / outflow-watch:** start with asset-event outflows from a
+   watchlist of protected contracts (depth-independent, available now); layer
+   call-attribution if the Index exposes the call tree.
+2. **Monitor gate:** alert on an unexpected privileged outflow / interaction on a
+   protected contract → hand it to the governance/access-control auditors for live
+   adjudication (event-driven triage, not "audit this contract"). Wire via
+   `webhooks/secondlayer-webhook.ts` (exists, not wired).
 
 ## Agent-driven PoC: sandbox prerequisite + graceful degrade (deferred 2026-06-26)
 **Status:** not pressing — local-only gap; prod (Vercel Sandbox) unaffected.
