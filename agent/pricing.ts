@@ -38,8 +38,12 @@ interface AssetMeta {
 const ASSETS: Record<string, AssetMeta> = {
   // Native STX (synthetic identifier used by the asset-holdings subgraph).
   STX: { decimals: 6, usdPerUnit: 2.0, symbol: "STX" },
-  // sBTC — the wedge's flagship value-bearing asset (1:1 BTC).
-  "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token::sbtc": {
+  // sBTC — the wedge's flagship value-bearing asset (1:1 BTC). The canonical asset
+  // id is `<contract>::sbtc-token` (the define-fungible-token name is `sbtc-token`,
+  // NOT `sbtc`) — verified against the Index. Using the wrong suffix leaves real
+  // sBTC unpriced. This allowlist is also the scam-token defense: stxcity look-alikes
+  // named "sBTC"/"Wsbtc"/"esBTC" are NOT here, so they score $0 and sink in the rank.
+  "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token::sbtc-token": {
     decimals: 8,
     usdPerUnit: 100000,
     symbol: "sBTC",
