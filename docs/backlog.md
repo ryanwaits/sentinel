@@ -50,6 +50,39 @@ eliminate this — it's model discipline on a big paste.
 
 **When picked up:** try (1); if subagents can't hold tools, do (2).
 
+## Monitor wedge — inner-contract-call visibility ("ninja contract" detector) (2026-06-26)
+**Status:** the product play. Distinct from auditing — this is the MONITOR stage data layer.
+
+**The gap it closes (Charisma-DAO-owner complaint):** a Stacks tx has ONE top-level
+principal sender + ONE entry-point contract. When the entry point is an attacker
+contract M that internally `(contract-call? victim ...)`, the call to `victim` is an
+*event in M's execution trace*, NOT a top-level tx. Explorers key the per-contract
+"transactions" view on the **entry-point / direct caller**, so a privileged call to
+`victim` routed through M (a contract the owners didn't know existed) **never shows up
+under victim's tx list**. The owners "couldn't see the malicious txs" because the
+standard view doesn't surface inner/nested contract-calls into their contract.
+
+**Why secondlayer solves it:** the decoded Index/Streams capture `contract_call`
+events at execution granularity, indexable by the contract *touched* (not just the
+entry point). A subgraph can materialize "every caller of a protected contract's
+privileged fns, at any call depth," which (a) enhances/over-lays explorers with the
+visibility owners wanted, and (b) is the trigger source for the monitor gate →
+auditor evaluation.
+
+**To build / verify:**
+1. **Confirm nesting depth:** does the secondlayer `contract_call` subgraph source
+   capture NESTED inner calls, or only top-level entry points? (Source type is
+   `contract_call` with `sender`/`contractId`/`functionName`/`args` — verify whether
+   `contractId` is the entry point only or each touched contract.) This is the make-or-
+   break question. If top-level only, use Streams/Index decoded receipts instead.
+2. **`contract-call-watch` subgraph:** index calls to a watchlist of protected
+   contracts + privileged fn names (`execute-proposal`, `socialize-debt`,
+   `set-approved-*`, `set-impl`, mint/transfer), keyed (target, fn, caller, depth).
+3. **Monitor gate:** alert when an unrecognized / newly-deployed contract invokes a
+   privileged fn on a protected contract → hand the interaction to the
+   governance/access-control auditors for live adjudication (event-driven triage, not
+   "audit this contract"). Wire via `webhooks/secondlayer-webhook.ts` (exists, not wired).
+
 ## Agent-driven PoC: sandbox prerequisite + graceful degrade (deferred 2026-06-26)
 **Status:** not pressing — local-only gap; prod (Vercel Sandbox) unaffected.
 
