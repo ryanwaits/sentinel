@@ -10,7 +10,7 @@ Our tool audits **Clarity contract logic**. A large share of headline Stacks/Bit
 - `key-compromise` — stolen privileged key / opsec failure. **Out of scope** for contract-logic auditing (the contract behaved as written for a holder of the key). Listed for completeness and contrast.
 - `oracle` — off-chain data-feed integrity / economic pricing defect. **Partially in scope**: only catchable if the contract itself lacks in-contract sanity bounds, staleness/timestamp checks, or circuit breakers.
 
-The seven audit dimensions our subagents apply: **access-control, reentrancy, share-accounting, interest-math, flashloan-economics, invariants-dos, governance**.
+The eight audit dimensions our subagents apply: **access-control, reentrancy, share-accounting, interest-math, flashloan-economics, invariants-dos, governance, oracle**.
 
 **Bottom line on confirmed in-scope incidents:** The clearly-confirmed *contract-logic* exploits with concrete on-chain detail are a small set — ALEX (2025), Arkadiko Swap (2021), Zest (2024), and Charisma (2024). The two largest-by-headline ALEX incidents include one (the XLink bridge) that is purely key-compromise and out of scope. Several entries below are recurring audit-finding *patterns* (from formal audits, not live exploits) and are flagged as such.
 
@@ -115,6 +115,7 @@ The seven audit dimensions our subagents apply: **access-control, reentrancy, sh
 - https://www.nasdaq.com/articles/coinmarketcap-shows-crypto-spike-bitcoin-flippening-in-apparent-glitch
 
 **Our dimensions that catch it:**
+- **oracle** — the core: a price consumed with no deviation/bounds/staleness guard.
 - **interest-math / invariants-dos** — collateral valuation math that accepts an unbounded external price violates the over-collateralization invariant.
 - (Adjacent) **flashloan-economics** — same family of "price-fed value extraction," though here the bad price came from a feed glitch, not a manipulated pool.
 
@@ -139,7 +140,8 @@ The seven audit dimensions our subagents apply: **access-control, reentrancy, sh
 - https://mezo.org/blog/a-community-driven-response-to-velars-recent-exploit
 
 **Our dimensions that catch it:**
-- **flashloan-economics** — the core is economic value extraction via repeated open/close cycling against mispriced/stale pool pricing.
+- **oracle** — the core: price consumed with no staleness/timestamp check and timeable/attacker-influenced updates.
+- **flashloan-economics** — economic value extraction via repeated open/close cycling against mispriced/stale pool pricing.
 - **interest-math** — perp pricing/PnL math evaluated against a price the attacker can time.
 - **invariants-dos** — missing pause/circuit-breaker; LP reserve-conservation invariant not enforced under adversarial cycling.
 
@@ -176,16 +178,16 @@ The seven audit dimensions our subagents apply: **access-control, reentrancy, sh
 
 ---
 
-## 7. Charisma — `unwrap` `as-contract` / `tx-sender` privilege escalation
+## 7. Charisma — ExecutorDAO proposal-execution → `as-contract` / `tx-sender` escalation
 
 - **Date:** 2024-09-21
-- **Protocol:** Charisma (Stacks liquidity/staking)
+- **Protocol:** Charisma (Stacks liquidity/staking; **ExecutorDAO**-based — proposals are smart contracts the DAO executes)
 - **Estimated loss:** ~183,548 STX (~$530k cited)
 - **CLASS:** `logic-bug` (in scope) — confidence: medium
 
-**Root cause.** The `unwrap` function wrapped privileged internal calls in `(as-contract ...)`, which reassigns `tx-sender` to the Charisma contract principal. Because downstream authorization relied on `tx-sender`, the attacker effectively gained the same rights as the contract/owner and abused them to transfer STX and mint tokens. A classic Clarity-specific anti-pattern: `tx-sender`-based authorization combined with `as-contract` context switching — not a key compromise.
+**Root cause.** Charisma uses the **ExecutorDAO "smart-contracts-as-proposals" model**: the DAO executes a proposal contract, and proposal/privileged execution is wrapped in `(as-contract ...)`, which reassigns `tx-sender` to the Charisma contract principal. Because downstream authorization relied on `tx-sender`, an attacker-controlled proposal/path executed by the DAO ran with the contract/owner's rights and abused them to transfer STX and mint tokens. The **vector is governance proposal-execution**; the **mechanism** is the classic Clarity anti-pattern of `tx-sender`-based authorization defeated by `as-contract` context switching. Not a key compromise. (Vector framing per project owner; the `as-contract`/`tx-sender` mechanism is the source-documented part — confirm the exact proposal flow in the next incident-research refresh.)
 
-**Exploited functions / pattern:** `unwrap`, `as-contract`, `tx-sender`-based authorization, mint authorization, in-context STX transfer.
+**Exploited functions / pattern:** ExecutorDAO proposal execution, `unwrap`, `as-contract`, `tx-sender`-based authorization, mint authorization, in-context STX transfer.
 
 **Sources:**
 - https://www.beosin.com/resources/stacks-and-its-clarity-contract-security
@@ -193,11 +195,12 @@ The seven audit dimensions our subagents apply: **access-control, reentrancy, sh
 - https://newsletter.blockthreat.io/p/blockthreat-week-38-2024
 
 **Our dimensions that catch it:**
-- **access-control** — the central failure: authorization keyed on `tx-sender` inside an `as-contract` context.
+- **governance** — the vector: a DAO-executed proposal runs privileged code under `as-contract`; safety depended on the proposal/voting path not being attacker-reachable. See pattern [#12 ExecutorDAO].
+- **access-control** — the mechanism: authorization keyed on `tx-sender` inside an `as-contract` context.
 - **reentrancy** (adjacent) — same family of "control/context confusion around external/wrapped calls."
 
 **Detection heuristic for an auditor subagent:**
-> Grep for `as-contract` and, for each occurrence, trace whether any authorization downstream reads `tx-sender`. Under `as-contract`, `tx-sender` becomes the contract principal, so any `(asserts! (is-eq tx-sender <owner>))` style guard inside that context is trivially satisfied. Flag every `tx-sender`-based check reachable through an `as-contract` boundary; recommend `contract-caller` checks or capturing the original sender before the context switch.
+> On ExecutorDAO/proposal designs, trace the proposal-execution path: a proposal run under `(as-contract ...)` sets `tx-sender` to the DAO, so any downstream `(asserts! (is-eq tx-sender <owner>))` is trivially satisfied by the executed proposal. Grep every `as-contract` and check whether downstream auth reads `tx-sender`; flag all such checks reachable through an `as-contract`/proposal-execution boundary. Recommend `contract-caller` checks (or capturing the original sender before the switch), and verify who can get a proposal executed in the first place.
 
 ---
 
@@ -252,10 +255,10 @@ These come from formal audits / best-practice checklists, not on-chain incidents
 | 1 | ALEX self-listing vault (2025) | logic-bug | access-control, invariants-dos | Permission grants to caller-supplied/self-listed token contracts; `tx-sender` auth satisfied under `as-contract`. |
 | 2 | ALEX XLink bridge (2024) | key-compromise (OUT OF SCOPE) | access-control (centralization only) | Single key can upgrade/replace value-bearing endpoint -> centralization finding, not a logic guarantee. |
 | 3 | Arkadiko Swap LP-token (2021) | logic-bug | share-accounting, invariants-dos | Pair/pool creation accepts caller-supplied LP token without unique binding; shares from one pool redeemable against another. |
-| 4 | Arkadiko oracle glitch (2021) | oracle (partial) | interest-math, invariants-dos | Collateral valuation consumes external price with no deviation/bounds/staleness guard. |
-| 5 | Velar PerpDEX (2026) | oracle (partial) | flashloan-economics, interest-math, invariants-dos | Stale/timeable price + repeatable open/close cycle nets positive vs LP reserves; no circuit breaker. |
+| 4 | Arkadiko oracle glitch (2021) | oracle (partial) | oracle, interest-math, invariants-dos | Collateral valuation consumes external price with no deviation/bounds/staleness guard. |
+| 5 | Velar PerpDEX (2026) | oracle (partial) | oracle, flashloan-economics, interest-math, invariants-dos | Stale/timeable price + repeatable open/close cycle nets positive vs LP reserves; no circuit breaker. |
 | 6 | Zest duplicate-collateral (2024) | logic-bug | share-accounting, invariants-dos | `fold` over caller-supplied list (collateral/power) with no dedup/uniqueness; same asset counted N times. |
-| 7 | Charisma `as-contract` (2024) | logic-bug | access-control, reentrancy | `as-contract` reachable to a `tx-sender`-based auth check -> attacker assumes contract privileges. |
+| 7 | Charisma ExecutorDAO proposal (2024) | logic-bug | governance, access-control, reentrancy | DAO-executed proposal runs under `as-contract` -> `tx-sender` auth satisfied -> attacker assumes contract privileges. |
 | 8 | Zest signed-int rewards | logic-bug (audit pattern) | interest-math, share-accounting | Amount/reward param typed `int` where only non-negative valid -> use `uint` / assert `> 0`. |
 | 9 | Zest double-borrow | logic-bug (audit pattern) | invariants-dos, access-control | State-changing action lacks prior-state precondition (re-invocation guard). |
 | 10 | Unchecked bool via `try!` | logic-bug (audit pattern) | invariants-dos | `(response bool _)` unwrapped without asserting the bool is `true` (`(ok false)` slips through). |

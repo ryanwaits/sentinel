@@ -57,7 +57,7 @@ Before installing a package, check latest: `npm view <pkg> versions`.
 bun run poc:finding-1        # reproduce Finding 1 locally (15/15 assertions)
 bun run sandbox:build        # docker build the airgapped runner image
 bun run sandbox:run          # docker run --network none → PoC, no egress
-eve build                    # compile agent (4 tools, 8 subagents, 2 schedules, channel)
+eve build                    # compile agent (4 tools, 9 subagents, 2 schedules, channel)
 node .output/server/index.mjs   # headless server → POST /eve/v1/session triggers agent
 bun run dev                  # eve TUI (needs interactive terminal; --no-ui buggy in 0.12)
 bun run webhook              # secondlayer→eve HMAC bridge (PORT 3001)

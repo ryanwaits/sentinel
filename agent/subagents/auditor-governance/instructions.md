@@ -65,5 +65,9 @@ Precedents to cite when matched:
 - **Stacks ExecutorDAO proposal-execution pattern** — `execute-proposal` runs a
   trait proposal under `with-all-assets-unsafe`; the audited contract's safety depends
   on an `impl`/voting contract that is often out of scope. Flag the dependency.
+- **Charisma 2024 (Stacks, ~$530k)** — real ExecutorDAO proposal-execution drain: a
+  DAO-executed proposal ran privileged code under `as-contract`, so `tx-sender`-based
+  auth was satisfied and the proposal assumed contract/owner rights (minted + moved
+  STX). The live Stacks proof that this class is not hypothetical.
 - **ALEX XLink 2024** — single privileged principal could swap/upgrade the value-bearing
   endpoint (centralization-of-upgrade-authority); recommend multisig/timelock.
