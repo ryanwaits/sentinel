@@ -110,6 +110,23 @@ exploits can only be reacted to — but (a) mempool gives a pre-confirmation win
 and pausing stops txs 2..N, and (c) the attacker's SETUP phase (deploy + get authorized)
 precedes the drain and is itself detectable — the strongest early warning.
 
+**Print-caller coverage (VERIFIED 2026-06-26, sampled real mainnet prints):**
+caller attribution via prints is **inconsistent and usually tx-sender, not
+contract-caller**. Zest vault + dlmm-core print an explicit `caller` (contract-caller —
+ninja-capable); Hermetica usdh staking prints `user` (tx-sender) only; many emit
+`user`/`buyer`/nothing. ~8% of a 60-print sample had any caller-ish key. CONCLUSION:
+don't build the monitor on print-caller — it's opportunistic enrichment. The reliable
+universal backbone is **asset events** (depth-independent effect) + **entry-point call**
++ **post-conditions** + **mempool**.
+
+**Secondlayer enhancement this surfaces (flywheel item — a primitive, belongs IN
+secondlayer):** to attribute the IMMEDIATE contract-caller of an inner call for ANY
+contract (not just well-instrumented ones that print it), the Index would need to
+decode the execution **call stack** (currently not exposed — no call tree). The Stacks
+node has the call frames internally; exposing "immediate contract-caller per event /
+call depth" is the killer reverse-index explorers can't do. Our monitor is the use
+case that justifies building it — exactly the dogfood→roadmap flywheel.
+
 ## Agent-driven PoC: sandbox prerequisite + graceful degrade (deferred 2026-06-26)
 **Status:** not pressing — local-only gap; prod (Vercel Sandbox) unaffected.
 
