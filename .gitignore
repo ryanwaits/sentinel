@@ -14,3 +14,6 @@ simnet/history.json
 
 # eve durable runtime state
 .workflow-data/
+
+# account-personal project binding
+.secondlayer/
