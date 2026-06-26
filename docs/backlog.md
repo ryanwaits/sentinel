@@ -69,30 +69,46 @@ privileged fns, at any call depth," which (a) enhances/over-lays explorers with 
 visibility owners wanted, and (b) is the trigger source for the monitor gate →
 auditor evaluation.
 
-**Nesting-depth finding (checked the installed types):** the subgraph `contract_call`
-source's `ContractCallEvent` is **top-level only** — fields are `sender` ("the
-principal who signed the tx"), `contractId`, `functionName`, `args`, `result`; there
-is NO immediate-caller or call-depth field. So a `contract_call` subgraph alone has
-the SAME blind spot as explorers (it sees the entry-point call, not the inner call to
-victim). Two ways around it:
-- **Effect-based (works today):** the DRAIN itself — value leaving victim — surfaces
-  as `ft/nft/stx` asset events with victim as `sender` **at any call depth**, because
-  asset events are emitted regardless of which contract triggered the move. Our
-  `asset-holdings` subgraph already indexes exactly this. So "unexpected outflow from a
-  protected contract" is detectable now, even when the triggering contract is hidden.
-- **Call-attribution (needs verification):** to name the malicious *caller* (not just
-  the effect), check whether the decoded **Index / Streams** expose the execution call
-  tree or `contract_log`/print events that identify the inner call. The subgraph source
-  doesn't; the Index API might. Verify before promising "see who called you."
+**Call-tree finding (VERIFIED 2026-06-26 against the live Index + installed types):**
+There is **no structured nested call graph.** `sl index transactions get <tx>` returns
+top-level metadata + the entry-point `contract_call` + `post_conditions` — no events
+array, no inner-call tree. `sl index contract-calls` is top-level entry points only
+(`contract_id` = directly-called contract, `sender` = principal). The subgraph
+`contract_call` source matches (no caller/depth field). BUT the decoded **event stream**
+reconstructs the reverse index explorers lack, at any depth, keyed by the touched
+contract:
+- **`print` events carry caller attribution.** Verified: a vault `redeem` print event
+  is indexed under `contract_id = vault` with `payload.value.caller =
+  SP...v0-4-market` — i.e. the contract logged `contract-caller`, so an INNER call into
+  the vault is fully visible ("who called my privileged fn"). Caveat: depends on the
+  contract emitting the caller in a print (this vault does — prints caller in
+  redeem/socialize-debt/system-borrow; an arbitrary victim might not).
+- **`ft/nft/stx` asset events are depth-independent.** Value leaving victim emits an
+  event with victim as `sender` regardless of call depth → the DRAIN effect is always
+  visible (our `asset-holdings` already indexes this).
+- **Mempool is queryable** (`sl index mempool`) — pending txs before mining, with full
+  `contract_call` + post-conditions → PRE-confirmation warning, not just post-mortem.
+
+So secondlayer DOES expose what explorers hide — via prints (caller attribution when
+instrumented) + asset events (effect, always) + mempool (pre-confirmation). No call
+tree needed.
 
 **To build:**
-1. **`contract-call-watch` / outflow-watch:** start with asset-event outflows from a
-   watchlist of protected contracts (depth-independent, available now); layer
-   call-attribution if the Index exposes the call tree.
-2. **Monitor gate:** alert on an unexpected privileged outflow / interaction on a
-   protected contract → hand it to the governance/access-control auditors for live
-   adjudication (event-driven triage, not "audit this contract"). Wire via
+1. **outflow + privileged-call watch:** subgraph/Index watch over a watchlist of
+   protected contracts — (a) asset-event outflows (depth-independent, now), (b) `print`
+   events surfacing `caller` for privileged fns, (c) authorization-change calls
+   (`set-approved-*`, `set-impl`, proposal submission) as pre-drain setup signals.
+2. **mempool pre-confirmation tap:** flag a pending tx touching a protected contract's
+   privileged fn → warn (and pause if the contract is pausable) before it mines.
+3. **Monitor gate:** route any of the above to the governance/access-control auditors
+   for live adjudication (event-driven triage). Wire via
    `webhooks/secondlayer-webhook.ts` (exists, not wired).
+
+**Timing reality (the "isn't monitoring too late?" answer):** atomic single-tx flash
+exploits can only be reacted to — but (a) mempool gives a pre-confirmation window,
+(b) most big drains are MULTI-tx (Velar 236 wallets, Zest ~5 calls) so catching tx 1
+and pausing stops txs 2..N, and (c) the attacker's SETUP phase (deploy + get authorized)
+precedes the drain and is itself detectable — the strongest early warning.
 
 ## Agent-driven PoC: sandbox prerequisite + graceful degrade (deferred 2026-06-26)
 **Status:** not pressing — local-only gap; prod (Vercel Sandbox) unaffected.
