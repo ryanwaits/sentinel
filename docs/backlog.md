@@ -2,6 +2,25 @@
 
 Deferred, non-pressing items. Capture enough context to pick up later.
 
+## Headless-run observability (deferred 2026-06-26)
+**Status:** real gap — bit us during track-A capture. The headless eve server
+(`node .output/server/index.mjs`) exposes runs only via the SSE stream
+(`GET /eve/v1/session/:id/stream`), which: (a) does NOT replay a finished session
+(reconnect returns empty once done), and (b) **degrades to 0 bytes after many sessions
+on a long-lived server** (confirmed — even a trivial session stopped streaming). Net:
+we validated the pipeline (clean run completed, all 7 auditors, zero pauses) but lost
+the final report + token-usage twice.
+
+**What to build:** a deterministic sink for run output, independent of SSE —
+- have the agent/channel write the final report + `usage` (input/output tokens) to a
+  file or stdout on `turn.completed` (parseable, survives a closed stream), and/or
+- read eve's own run storage (the `wrun_*` session state) directly instead of scraping
+  SSE, and/or
+- for interactive runs use the eve TUI (`bun run dev`), which renders events natively.
+**Interim rule:** for any agent-driven run we need to observe, open ONE persistent
+stream from creation through completion on a FRESH server (restart first), and get
+token cost from the Vercel AI Gateway dashboard (authoritative) rather than the stream.
+
 ## Incident-sweep automation (deferred 2026-06-21)
 **Status:** not pressing. Clarity-drift half is automated (eve monthly schedule +
 `check_clarity_drift`). The incident half is **manual for now** — run the Claude Code
