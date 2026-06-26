@@ -11,6 +11,33 @@ airgapped Clarity VM, labeled honestly bug-vs-centralization.
 
 The moat is the *method + the accumulating corpus of verified PoCs*, not the model.
 
+## Product boundary — powered-by-secondlayer (the load-bearing rule)
+audit-sentinel is a **separate product/business** that is a **client of secondlayer's
+PUBLIC API**, not a feature inside secondlayer. We dogfood the same surface any
+customer uses (enforced by the hard rule in [../CLAUDE.md](../CLAUDE.md): depend ONLY
+on published `@secondlayer/*`). Why separate: different buyers (builders vs protocols),
+different GTM/pricing (usage/devtool vs retainer/outcome), and reputation/liability
+isolation (a security product makes adversarial, opinionated calls + carries disclosure
+risk that must NOT attach to neutral infra). Being secondlayer's most demanding client
+is the roadmap flywheel — our needs pull primitives into the platform.
+
+**The boundary principle (use this to decide where any new capability lives):**
+
+> **Generic detection primitives push DOWN into secondlayer; opinionated security
+> judgment stays UP in audit-sentinel.**
+
+- **Down (secondlayer, reusable by any security vendor):** decoded/queryable on-chain
+  data, immediate-caller / call-stack attribution, mempool feeds, real-time
+  subscriptions / watchlists, event indexing. Infra primitives every monitor wants.
+- **Up (audit-sentinel, opinionated + proprietary):** "is this interaction hostile?",
+  the auditor/verifier panel, reproduce-before-ship, bug-vs-centralization labeling,
+  disclosure workflow, the verified-PoC corpus.
+
+This keeps secondlayer broadly valuable (a platform security vendors build on, not a
+narrow security tool) and audit-sentinel a thin, high-margin judgment layer. When a
+capability is generic and every security vendor would want it (e.g. call-stack
+decoding), scope it as a secondlayer primitive — don't bury it in the app.
+
 ### Communication
 Anchor against two enemies:
 - **One-off human audits** → stale the instant code/state changes; we're *continuous*.

@@ -119,13 +119,42 @@ don't build the monitor on print-caller — it's opportunistic enrichment. The r
 universal backbone is **asset events** (depth-independent effect) + **entry-point call**
 + **post-conditions** + **mempool**.
 
-**Secondlayer enhancement this surfaces (flywheel item — a primitive, belongs IN
-secondlayer):** to attribute the IMMEDIATE contract-caller of an inner call for ANY
-contract (not just well-instrumented ones that print it), the Index would need to
-decode the execution **call stack** (currently not exposed — no call tree). The Stacks
-node has the call frames internally; exposing "immediate contract-caller per event /
-call depth" is the killer reverse-index explorers can't do. Our monitor is the use
-case that justifies building it — exactly the dogfood→roadmap flywheel.
+**Secondlayer-repo survey (2026-06-26, read `/Users/ryan/projects/secondlayer`) — what
+EXISTS vs what to scope. Apply the boundary rule (business-model.md): primitives DOWN,
+judgment UP.**
+
+ALREADY BUILT (the monitor substrate is mostly a CONFIG + consume exercise, not a build):
+- **Chain subscriptions + HMAC webhooks** (`packages/subgraphs/runtime/emitter.ts`,
+  `shared/schemas/subscriptions.ts`): real-time push, filterable triggers incl.
+  `contract_call` (contractId, functionName, caller, trait), `print_event`
+  (contractId, topic), and all ft/nft/stx events with min/max amount + wildcard traits.
+  Retries + circuit breaker. → the monitor gate's trigger layer largely EXISTS; we
+  configure subscriptions → `webhooks/secondlayer-webhook.ts` (our HMAC bridge) → gate.
+- **Mempool** (`indexer/src/mempool.ts`, `api/index/mempool.ts`): real-time decoded
+  pending txs, filter by sender/type/contract_id. → pre-confirmation window is real.
+- **Event decoding**: all asset events + `print` (full Clarity tuple preserved) +
+  contract_call + contract_deploy. Comprehensive.
+- No existing chain-security/alert feature (only billing spend-cap) → greenfield.
+
+CORRECTION to my earlier note: immediate-caller of an INNER call is **NOT a quick
+secondlayer feature — it's an UPSTREAM Stacks-node limitation**. The node observer
+(`/new_block`, `/new_mempool_tx`) only emits the TOP-LEVEL contract_call payload; inner
+`(contract-call? …)` frames are not in the receipt. So secondlayer cannot synthesize a
+call tree from block data — it would need node execution-trace export or a separate
+tracer. The `caller` on subscriptions/prints is tx-sender / contract-emitted, not a
+decoded call stack. So "name the inner caller for ANY contract" is an R&D bet, not a
+feature. (The DRAIN effect via asset events stays depth-independent and reliable.)
+
+PRIMITIVES TO SCOPE FOR SECONDLAYER (down; ranked by value/effort):
+1. **Watchlist abstraction** (med) — first-class, restartable registry of monitored
+   contracts that auto-provisions the right subscriptions. Today subscriptions are the
+   only mechanism (ephemeral, no watched-set). Every security vendor wants this.
+2. **Per-function mempool filter** (small) — index mempool on (contract_id,
+   function_name) so you can watch `X.execute-proposal` / `X.socialize-debt` pending.
+3. **Event dedup / rate-limit + durable outbox** (med) — alert-storm control + no lost
+   events between match and delivery. Reliability the security use-case needs.
+4. **Call-stack / immediate-caller** (large, upstream-gated) — node tracer / execution-
+   trace export. The killer reverse-index, but a real R&D project, not a feature.
 
 ## Agent-driven PoC: sandbox prerequisite + graceful degrade (deferred 2026-06-26)
 **Status:** not pressing — local-only gap; prod (Vercel Sandbox) unaffected.
