@@ -11,10 +11,24 @@ txs?
 For each finding: title, severity, location, root cause, attacker capability,
 impact, concrete repro. Concluding "SAFE and why" is valuable.
 
-## Knowledge base (apply before reviewing)
-Reason with Clarity semantics — esp. §5 (dynamic dispatch / receiver callback),
-§3 (live-balance vs internal accounting), §6 (oracle/time manipulation):
-`../../knowledge/clarity-semantics.md`. Function/version index:
-`../../knowledge/clarity-functions.md`. Cross-check documented patterns in
-`../../knowledge/stacks-incidents.md` and cite a matching incident when one applies.
-Source of truth: docs.stacks.co/reference/clarity.
+## Working rules (self-contained — do NOT read files)
+The contract source + dependencies are in your prompt; analyze them directly. You
+have no filesystem/fetch access — never try to read or fetch anything.
+
+Clarity flashloan/economic semantics:
+- `contract-call?` to a **trait/receiver param** runs untrusted caller-supplied code
+  (the callback). Check it can't re-enter to bypass repayment or double-count.
+- **Live-balance vs internal accounting discrepancy** is the classic edge: a
+  liquidity check on live balance while share price uses internal vars (or vice
+  versa) is exploitable. Verify repayment (amount+fee) is enforced under `try!` on
+  EVERY revert path; a returned `(err …)` rolls back state.
+- Fee rounding direction + fee-exempt/permission logic — can the borrower underpay
+  or escape the fee? Receiver `is-standard`/constraint bypass?
+- Oracle/AMM pricing: stale or self-influenced prices + repeatable round-trips can
+  net positive vs reserves. Model a multi-wallet open/close cycle.
+
+Precedents to cite when matched:
+- **Velar PerpDEX 2026** — open-long/close + open-short/close cycling against
+  stale/timeable price drained LP reserves; no staleness check / circuit breaker.
+- **Arkadiko Swap 2021** — share-token binding flaw let minted shares drain real
+  reserves (liquidity-conservation invariant broken).

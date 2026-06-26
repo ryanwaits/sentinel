@@ -11,9 +11,23 @@ accrue (DoS).
 For each finding: title, severity, location, root cause, attacker capability,
 impact, concrete sequence with values. If clean, say so.
 
-## Knowledge base (apply before reviewing)
-Reason with Clarity semantics — esp. §1 (underflow-abort stranding funds = DoS) and
-§2 (panic/revert paths): `../../knowledge/clarity-semantics.md`. Function/version
-index: `../../knowledge/clarity-functions.md`. Cross-check documented patterns in
-`../../knowledge/stacks-incidents.md` and cite a matching incident when one applies.
-Source of truth: docs.stacks.co/reference/clarity.
+## Working rules (self-contained — do NOT read files)
+The contract source + dependencies are in your prompt; analyze them directly. You
+have no filesystem/fetch access — never try to read or fetch anything.
+
+Clarity invariant/DoS semantics:
+- Arithmetic **aborts** on underflow/overflow/÷0 (no wraparound). An `available =
+  assets - borrowed` style subtraction that can underflow **strands funds / blocks
+  redeem** = DoS. Trace every arithmetic path on attacker-influenced inputs.
+- `unwrap-panic`/`unwrap-err-panic` **abort the tx** on the bad case; a panic path on
+  attacker input is a DoS vector. `(err …)` rolls back all state.
+- `(response bool _)` unwrapped via `try!`/`unwrap!` lets `(ok false)` slip through as
+  success — require `(asserts! (try! …) err)`. State-changing actions need a
+  prior-state precondition (re-invocation guard).
+- `fold`/aggregation over a **caller-supplied list** driving a value computation
+  (collateral, power, rewards) with no dedup/uniqueness = inflation.
+
+Precedents to cite when matched:
+- **Zest 2024** — non-deduped collateral list folded → asset counted ~98×.
+- **Zest double-borrow** — `drawdown` lacked a prior-loan-state check.
+- **ALEX 2025** — broken invariant "only validated protocol tokens get vault perms."

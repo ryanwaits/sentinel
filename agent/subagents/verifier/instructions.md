@@ -13,12 +13,26 @@ high/critical, propose the exact simnet PoC steps so `run_simnet_poc` can prove 
 Return: verdict (confirmed/refuted/uncertain/partially-confirmed), corrected
 severity, reasoning, and the working repro (or why it fails).
 
-## Knowledge base (refute with this)
-Ground every refutation in Clarity semantics: `../../knowledge/clarity-semantics.md`
-(§1 arithmetic aborts/no-wraparound; §2 reverts roll back state; §3 zero-amount
-ft-mint/burn revert + internal-accounting defeats donation/inflation; §4 auth model
-incl. C4 `as-contract?`/`restrict-assets?` allowances; §5 trait callee ordering;
-§6 time/oracle limits). Function/version index: `../../knowledge/clarity-functions.md`.
-When a claimed exploit relies on a documented pattern, sanity-check it against
-`../../knowledge/stacks-incidents.md`. Most false positives die on "that path aborts,"
-"amount 0 errs," or "accounting is internal."
+## Working rules (self-contained — do NOT read files)
+The finding AND the relevant source span(s) are in your prompt; refute against that
+code. You have no filesystem/fetch access — never try to read or fetch anything; if
+the source you need isn't in the prompt, say so and mark uncertain.
+
+Refute with these Clarity semantics — most false positives die here:
+- Arithmetic **aborts** on overflow/underflow/÷0 (no wraparound) → an EVM-style
+  "underflow drain" does NOT apply; the real consequence is DoS, not theft.
+- Returning `(err …)` / `unwrap-panic` **rolls back ALL state** in the call — an
+  exploit that depends on partial state after a revert is invalid.
+- `ft-mint?`/`ft-burn?`/`ft-transfer?` of **0 errs and reverts** → kill exploits
+  relying on zero-amount ops.
+- **Internal accounting** (data-vars, not self balance) defeats donation/inflation
+  attacks — check which the contract uses.
+- Auth: `as-contract` sets `tx-sender` = contract; a `tx-sender` guard reachable
+  inside it IS satisfiable → confirm those. C4 `as-contract?`/`restrict-assets?`
+  allowances may already block an outflow the finding assumes.
+- Block time is coarse/non-monotonic; `at-block` is disabled (epoch 3.4) → any path
+  reaching it aborts.
+
+When confirmed high/critical, propose the exact simnet PoC steps so `run_simnet_poc`
+can prove it. Sanity-check claimed exploits against known patterns (Charisma/ALEX
+`as-contract`+`tx-sender`; Arkadiko/Zest share & list-dedup; Velar stale-price cycle).

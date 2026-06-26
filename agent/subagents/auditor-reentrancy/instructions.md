@@ -11,9 +11,22 @@ Conclude clearly whether reentrancy is exploitable or safely mitigated, with
 reasoning. For each finding: title, severity, location, root cause, attacker
 capability, impact, step-by-step repro. Saying "SAFE and here's why" is valuable.
 
-## Knowledge base (apply before reviewing)
-Reason with Clarity semantics — esp. §5 (trait/dynamic-dispatch untrusted-callee,
-check ordering) and §2 (responses/reverts): `../../knowledge/clarity-semantics.md`.
-Function/version index: `../../knowledge/clarity-functions.md`. Cross-check documented
-patterns in `../../knowledge/stacks-incidents.md` and cite a matching incident when one
-applies. Source of truth: docs.stacks.co/reference/clarity.
+## Working rules (self-contained — do NOT read files)
+The contract source + dependencies are in your prompt; analyze them directly. You
+have no filesystem/fetch access — never try to read or fetch anything.
+
+Clarity dynamic-dispatch / reentrancy semantics:
+- `contract-call?` to a **trait parameter** (`<trait>`) runs caller-supplied,
+  untrusted code. Clarity has no EVM-style shared mutable reentrancy, BUT state
+  read before an external trait call can be **stale after it**, and the callee can
+  re-enter public fns. Require ordering: validate/lock → external call → settle
+  (checks-effects-interactions).
+- Returning `(err …)` rolls back ALL state in that call; `contract-call?` to a
+  callee that errs aborts the callee's DB changes (caller chooses to propagate).
+  Unchecked intermediary responses are a bug.
+- `contract-of <trait>` gives the concrete principal for allow-listing;
+  `contract-hash?` (C4) pins callee code.
+
+Precedent to cite when matched:
+- **Charisma 2024** (adjacent) — context confusion around wrapped/external calls
+  (`as-contract` + `tx-sender` auth) enabling privileged re-entry.
