@@ -10,7 +10,7 @@ Our tool audits **Clarity contract logic**. A large share of headline Stacks/Bit
 - `key-compromise` — stolen privileged key / opsec failure. **Out of scope** for contract-logic auditing (the contract behaved as written for a holder of the key). Listed for completeness and contrast.
 - `oracle` — off-chain data-feed integrity / economic pricing defect. **Partially in scope**: only catchable if the contract itself lacks in-contract sanity bounds, staleness/timestamp checks, or circuit breakers.
 
-The six audit dimensions our subagents apply: **access-control, reentrancy, share-accounting, interest-math, flashloan-economics, invariants-dos**.
+The seven audit dimensions our subagents apply: **access-control, reentrancy, share-accounting, interest-math, flashloan-economics, invariants-dos, governance**.
 
 **Bottom line on confirmed in-scope incidents:** The clearly-confirmed *contract-logic* exploits with concrete on-chain detail are a small set — ALEX (2025), Arkadiko Swap (2021), Zest (2024), and Charisma (2024). The two largest-by-headline ALEX incidents include one (the XLink bridge) that is purely key-compromise and out of scope. Several entries below are recurring audit-finding *patterns* (from formal audits, not live exploits) and are flagged as such.
 
@@ -229,6 +229,20 @@ These come from formal audits / best-practice checklists, not on-chain incidents
 - **Dimension:** **invariants-dos** (correctness of control flow).
 - **Heuristic:** For any call to a function returning `(response bool _)`, ensure the unwrapped boolean is explicitly asserted `true` (`(asserts! (try! ...) err)`), not merely unwrapped. Flag `try!`/`unwrap!` on bool-returning responses where the `false` case is not handled.
 
+### 11. Beanstalk — flash-loan governance takeover (cross-chain reference)
+- **Protocol:** Beanstalk Farms (Ethereum stablecoin protocol). **Date:** 2022-04-17. **Estimated loss:** ~$182M. **CLASS:** `logic-bug` (governance-execution; in scope as a *class*), confidence: high. **NOTE:** Ethereum, not Stacks — included because no comparable Stacks DAO drain is publicly documented and this is the canonical governance-takeover incident. The class maps directly onto Stacks ExecutorDAO/treasury designs.
+- **Root cause:** Beanstalk governance let a proposal execute arbitrary code, voting power was read from **live token balance** with **no snapshot** and **no timelock** between passing and execution. The attacker flash-borrowed ~$1B of governance tokens, used `emergencyCommit` to pass + execute a malicious proposal (whose `init` was attacker-controlled code) that transferred the protocol's assets to themselves, and repaid the flash loan — all in one transaction.
+- **Function/pattern:** governance `propose`/`vote`/`emergencyCommit` + arbitrary-code proposal `init`/execute; live-balance voting; no snapshot; no timelock.
+- **Dimension:** **governance** (primary), flashloan-economics (vote acquisition), access-control (execution authority).
+- **Heuristic:** Flag governance that (a) reads voting power from live balance at execute time instead of a snapshot at proposal creation (flash-loanable), (b) has no timelock between pass and execute, (c) executes arbitrary proposal code with protocol authority, or (d) has an emergency-execute path that bypasses the normal delay. Any one of these makes a one-tx treasury takeover plausible.
+
+### 12. Stacks ExecutorDAO proposal-execution pattern (audit pattern)
+- **Protocol:** Stacks ExecutorDAO family (StackerDAOs / Bitcoin DAO lineage; e.g. the `dao-executor` audited on the Zest sBTC vault). **CLASS:** `logic-bug` (audit pattern), confidence: high. No specific public live exploit; recurring high-blast-radius surface.
+- **Root cause / shape:** `execute-proposal` takes a `<proposal-script>` trait param and runs `(try! (as-contract? ((with-all-assets-unsafe)) (contract-call? script execute)))` — i.e. **arbitrary caller-supplied proposal code runs with DAO authority and ALL runtime asset protection disabled**. The only gate is `(is-eq contract-caller impl)`, so the entire security of the treasury reduces to the `impl`/voting contract (often deployed separately and out of audit scope): a malicious proposal, once executed, can register itself as an extension/authorized-contract and call privileged fns (`socialize-debt`, `system-borrow`, transfers).
+- **Function/pattern:** `execute-proposal(<proposal-script>)`, `set-impl`, `as-contract? ((with-all-assets-unsafe))`, `contract-call? script execute`, extension/authorized-contract registration.
+- **Dimension:** **governance** (primary), access-control.
+- **Heuristic:** When a contract executes a trait-typed proposal, (a) flag `with-all-assets-unsafe` (no runtime backstop) around the dynamic call, (b) trace the full set of privileged fns a hostile proposal could reach once executed, (c) identify the `impl`/voting contract that gates execution and, if it's out of scope, flag the treasury's safety as *dependent on an unaudited governance contract* — state the trust assumption explicitly, (d) check for snapshot voting + timelock in that governance layer.
+
 ---
 
 ## Closing matrix: pattern -> audit dimension -> detection heuristic
@@ -245,5 +259,7 @@ These come from formal audits / best-practice checklists, not on-chain incidents
 | 8 | Zest signed-int rewards | logic-bug (audit pattern) | interest-math, share-accounting | Amount/reward param typed `int` where only non-negative valid -> use `uint` / assert `> 0`. |
 | 9 | Zest double-borrow | logic-bug (audit pattern) | invariants-dos, access-control | State-changing action lacks prior-state precondition (re-invocation guard). |
 | 10 | Unchecked bool via `try!` | logic-bug (audit pattern) | invariants-dos | `(response bool _)` unwrapped without asserting the bool is `true` (`(ok false)` slips through). |
+| 11 | Beanstalk governance takeover (2022, ETH ref) | logic-bug (governance class) | governance, flashloan-economics | Flash-loaned votes + no snapshot + no timelock + arbitrary-code proposal -> one-tx treasury drain. |
+| 12 | Stacks ExecutorDAO proposal exec (pattern) | logic-bug (audit pattern) | governance, access-control | Trait proposal run under `with-all-assets-unsafe` with DAO authority; safety reduces to the (often out-of-scope) `impl`/voting contract. |
 
-**Coverage summary:** Of 10 entries, 4 are confirmed live contract-logic exploits with concrete on-chain detail (#1 ALEX, #3 Arkadiko Swap, #6 Zest, #7 Charisma), 3 are recurring formal-audit logic patterns (#8-#10, no loss), 2 are oracle/economic defects partially in scope (#4 Arkadiko, #5 Velar), and 1 is a key compromise that contract-logic auditing cannot catch (#2 ALEX XLink). Reviewers should weight detection claims accordingly: our highest-value, clearly-in-scope precedents are the access-control / `as-contract` confusion (#1, #7), unvalidated-list aggregation (#6), and LP-token / share-binding (#3) families.
+**Coverage summary:** Of 12 entries, 4 are confirmed live contract-logic exploits with concrete on-chain detail (#1 ALEX, #3 Arkadiko Swap, #6 Zest, #7 Charisma), 4 are recurring formal-audit logic patterns (#8-#10, #12 ExecutorDAO; no loss), 2 are oracle/economic defects partially in scope (#4 Arkadiko, #5 Velar), 1 is a key compromise that contract-logic auditing cannot catch (#2 ALEX XLink), and 1 is a cross-chain governance-takeover reference (#11 Beanstalk; Ethereum, no public Stacks analog). Reviewers should weight detection claims accordingly: our highest-value, clearly-in-scope precedents are the access-control / `as-contract` confusion (#1, #7), governance proposal-execution (#11, #12), unvalidated-list aggregation (#6), and LP-token / share-binding (#3) families.

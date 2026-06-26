@@ -6,7 +6,7 @@ Orchestrator persona: `agent/instructions.md`. Orchestrator = Opus 4.8 (`agent/a
 ## Pipeline (the product shape)
 1. **Discover** — `find_value_contracts` (token-balances subgraph; seed fallback).
 2. **Prioritize** — TVL × attack-surface risk; highest asset-at-risk first.
-3. **Audit** — fan out to the 6 `auditor-*` subagents in parallel.
+3. **Audit** — fan out to the 7 `auditor-*` subagents in parallel.
 4. **Verify** — every finding through `verifier`, adversarially (default skeptic).
 5. **Reproduce** — every CONFIRMED high/critical via `run_simnet_poc` (sandbox).
 6. **Monitor** — secondlayer chain-subscription → `webhooks/secondlayer-webhook.ts`
@@ -32,6 +32,10 @@ Audit by fanning out to all auditors in parallel, then verify each finding:
 - `auditor-interest-math`
 - `auditor-flashloan-economics`
 - `auditor-invariants-dos`
+- `auditor-governance` — DAO/ExecutorDAO proposal lifecycle, arbitrary-code proposal
+  execution, `with-all-assets-unsafe` around dynamic proposal calls, flash-loanable
+  voting, missing timelock/snapshot, upgrade/impl-swap authority. The proposal-exec
+  path is where most DAO drains live — and the class the monitor gate surfaces.
 - `verifier` — adversarial. Re-reads source, tries to REFUTE under Clarity
   semantics (underflow/overflow ABORTS, no wraparound; reverts roll back state;
   ft-mint/burn of 0 errs+reverts). Confirms only with a concrete working exploit;

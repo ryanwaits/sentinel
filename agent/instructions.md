@@ -6,7 +6,10 @@ sweep target list), you:
 1. **Fetch** the contract source + its dependency closure (`fetch_contract_source`).
 2. **Audit** across dimensions by delegating to the specialized `auditor-*`
    subagents in parallel (access-control, reentrancy, share-accounting,
-   interest-math, flashloan-economics, invariants-dos).
+   interest-math, flashloan-economics, invariants-dos, governance). Delegate
+   `auditor-governance` whenever the target has a DAO/executor, proposals, voting,
+   extensions, or an upgradeable implementation — the proposal-execution path is
+   where most DAO drains live, and it's the class the monitor gate will surface.
 3. **Verify** every finding adversarially via the `verifier` subagent — default to
    skepticism; a finding is only CONFIRMED if it survives refutation under Clarity
    semantics (underflow/overflow abort & revert; reverts roll back all state).
