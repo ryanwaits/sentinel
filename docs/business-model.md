@@ -74,6 +74,26 @@ generalizes). Don't over-invest assuming Stacks-only is a big business.
 **Primary motion: retainer-first.** Documented now, build the monitoring/dashboard
 product as we approach it — revisit after validation.
 
+## Service tiers = model tiers (packaging — validated by COGS)
+The model-tiering (see COGS below) doubles as a **service-level ladder**: same pipeline,
+swap the *auditor* model by depth. **Load-bearing principle — the credibility floor is
+constant across tiers:** the **Opus verifier + green simnet PoC** run at EVERY tier, so
+no tier ever ships an unverified or worse-quality finding. Higher tiers buy wider
+**recall** (subtler-candidate coverage), not better precision — exactly what a high-stakes
+moment (a launch) pays for.
+
+| Tier | Auditors / Verifier | When | Maps to | Rough $ |
+|---|---|---|---|---|
+| **Monitor** (default) | Sonnet / **Opus** | continuous, on-change retainer monitoring | retainer MRR | ~$2–5/sweep COGS |
+| **Deep / Launch** | **Opus** / **Opus** | pre-launch, major upgrade, post-incident, onboarding | one-off audit (premium) | ~$3–8/sweep COGS |
+| **Max / Adversarial+** | Opus, N-pass per dim + multi-vote verify + deep PoC | top-TVL, pre-mainnet, bounty-grade | premium / enterprise | higher; scope-priced |
+
+Why it sells: it's a natural **upsell on the same product** — "your retainer runs
+continuous Monitor-tier; upgrade to a Deep all-Opus pass for your v2 launch." Honest,
+because every tier is reproduce-backed; the premium buys assurance-of-completeness, not a
+different credibility bar. (Implementation is trivial — parameterize the auditor model by
+a run-time `depth`/tier; verifier stays Opus. See backlog.)
+
 ## Pricing hypotheses (validate, don't commit)
 - **Retainer:** ~$2–8k/mo per protocol, tiered by TVL/complexity. Frame as
   insurance — for a protocol holding $10M+, $5k/mo is trivial.

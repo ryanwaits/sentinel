@@ -2,6 +2,22 @@
 
 Deferred, non-pressing items. Capture enough context to pick up later.
 
+## Tiered-depth model selection (service tiers) (2026-06-27)
+**Status:** product-validated (see business-model.md "Service tiers"); cheap to build.
+Make the **auditor model selectable per run** so a "depth"/tier knob picks Monitor
+(Sonnet auditors) vs Deep (Opus auditors); the **verifier stays Opus at every tier**
+(the credibility floor must not move).
+
+**Implementation (simplest):** each auditor `agent.ts` reads
+`process.env.AUDITOR_MODEL ?? "anthropic/claude-sonnet-4.6"`; a Deep run sets
+`AUDITOR_MODEL=anthropic/claude-opus-4.8`. Verifier/orchestrator hardcode Opus.
+- Verify eve resolves a `model` from an env expression at build/run (the model field
+  may be read at compile time — if so, use two builds or a channel-level override
+  instead; check `defineAgent` model resolution before committing to the env approach).
+- Expose tier on the trigger (channel/session input) so a retainer defaults to Monitor
+  and a one-off "launch audit" requests Deep. Max tier (N-pass per dim + multi-vote
+  verify) is a bigger change — separate item.
+
 ## Headless-run observability (deferred 2026-06-26)
 **Status:** real gap — bit us during track-A capture. The headless eve server
 (`node .output/server/index.mjs`) exposes runs only via the SSE stream
