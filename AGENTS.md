@@ -9,9 +9,12 @@ Orchestrator persona: `agent/instructions.md`. Orchestrator = Opus 4.8 (`agent/a
 3. **Audit** — fan out to the 8 `auditor-*` subagents in parallel.
 4. **Verify** — every finding through `verifier`, adversarially (default skeptic).
 5. **Reproduce** — every CONFIRMED high/critical via `run_simnet_poc` (sandbox).
-6. **Monitor** — secondlayer chain-subscription → `webhooks/secondlayer-webhook.ts`
-   → re-audit on state change.
-7. **Act** — disclosure / bounty / salvage. **Human-gated. Never automatic.**
+6. **Monitor** — continuous BEHAVIORAL surveillance (not re-audit-on-change): watch
+   live activity/flows/interactions/governance against the client's contracts, scoped
+   to the audit's KB/context, via secondlayer subscriptions + mempool. Default +
+   client-configured + context-aware triggers fire alerts. See
+   [docs/monitoring.md](./docs/monitoring.md).
+7. **Act** — disclosure / bounty / salvage / alert-escalation. **Human-gated. Never automatic.**
 
 ## Reproduce-before-ship (the credibility rule)
 A finding ships ONLY if it (a) survives adversarial verification AND (b) has a

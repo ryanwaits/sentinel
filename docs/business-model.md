@@ -62,6 +62,11 @@ post-sBTC. → On Stacks alone the TAM is thin.
 reproduce-first *methodology* (portable to other Clarity chains; pattern
 generalizes). Don't over-invest assuming Stacks-only is a big business.
 
+## Two products, one platform
+The offering is **Audit** (point-in-time code assurance: pre-launch / on-upgrade) +
+**Monitor** (continuous *behavioral* surveillance of live activity, NOT re-audit-on-change).
+Monitor is the recurring moat — see [monitoring.md](./monitoring.md). Revenue maps to these.
+
 ## Revenue streams (ranked by quality)
 
 | Stream | Recurring? | Variance | Notes |
