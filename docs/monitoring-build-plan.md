@@ -14,22 +14,35 @@ client-side filtering).
 
 ---
 
-## M0 — Unblock + de-risk the unknowns (S–M)
+## M0 — Unblock + de-risk the unknowns (S–M) — **DONE (2026-06-27)**
 **Goal:** remove the hard preconditions + retire the riskiest unbuilt mechanism before
 building on top of it.
-**Work:**
-- Add paid AI-Gateway credits; wire a **global daily spend ceiling** (pause + page on
-  breach) — ship together so the path is never exposed uncapped.
-- **Durable-sink spike (riskiest):** decide + prove how a finished eve run's report +
-  usage are read WITHOUT SSE (write file/stdout on `turn.completed` vs read `wrun_*`
-  storage). Pick one, prove it round-trips.
-- eve session auth: `agent/channels/eve.ts` `none()` → authed (jwtHmac) or
-  network-restricted to the bridge.
-**Exit:** an Opus sweep runs (no 403); its final report + token usage are reliably
-retrievable by an external reader with zero SSE scraping; an unauthenticated session POST
-is rejected; a synthetic spend-ceiling breach pauses + pages.
+**Work + outcome:**
+- **Durable-sink spike (premise was wrong, not risky):** the doc premise "eve SSE degrades
+  to 0 bytes / doesn't replay a finished session" was a `timeout`-command misdiagnosis (see
+  memory `eve-run-observability`). The event stream is **durable + replayable**:
+  `GET …/stream?startIndex=0` re-serves a finished run's full report (`message.completed`) +
+  usage (`step.completed`) from storage any time. Mechanism = a thin reader,
+  **`monitoring/run-reader.ts`** (`readRun(sessionId)`). Proven fire-and-forget round-trip
+  (report + token usage + Opus-4.8 `costUsd`). Opus ran with no 403 on existing credits
+  (~$0.06/trivial run) — items 1–2 don't need the top-up.
+- **eve session auth:** `agent/channels/eve.ts` `none()` → **`jwtHmac`** (HS256), fail-closed
+  (anon only via explicit `EVE_ALLOW_ANON=1`). Bridge + reader mint short-lived tokens
+  (**`monitoring/eve-jwt.ts`**). Proven: no/bad/wrong/expired token → 401 on POST *and* GET
+  stream; valid → 202; reader auto-mints.
+- **Global daily spend ceiling:** **`monitoring/spend-ceiling.ts`** — `reserve(tier)` at
+  DISPATCH (cap before spend) against a daily budget using per-tier estimates ($1.11 Monitor /
+  $2 Deep); on breach → pause (persists across day rollover until human `clear`) + page (loud
+  log + `PAUSED` marker + optional `SENTINEL_PAGER_URL`). Wired into the bridge (breach → 429,
+  no dispatch). Proven: allow→allow→breach-pages→deny, integrated through the bridge.
+**Exit:** ✅ all met. (Paid AI-Gateway top-up still pending for a full ~$2 Deep sweep — human step.)
 **Deps:** none.
-**secondlayer feedback:** none (all Sentinel-internal).
+**eve feedback (new):** channel `events` handlers AND `agent/hooks/` (`defineHook`) do **not**
+fire in the headless built server (`node .output/server`) for the agent turn — both
+discovered+compiled yet silent, with/without a stream consumer (re-validated against a
+verified-binding server). Eager server-side persist-on-completion is unavailable there; read
+the replayable stream instead. Likely the emit composer only runs under `eve dev`/TUI — worth
+confirming upstream. See memory `eve-headless-run-readout`.
 
 ## M1 — Static foundation, no chain dependency (M)
 **Goal:** the judgment artifacts that everything downstream reads, buildable offline.
