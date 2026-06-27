@@ -24,7 +24,13 @@ const SEED = {
       contractId: "SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.v0-vault-sbtc",
       usdAtRisk: null as number | null,
       breakdown: [
-        { kind: "ft" as const, assetId: "sbtc", symbol: "sBTC", amount: null as string | null, usd: null as number | null },
+        {
+          kind: "ft" as const,
+          assetId: "sbtc",
+          symbol: "sBTC",
+          amount: null as string | null,
+          usd: null as number | null,
+        },
       ],
       note: "Zest sBTC vault — audited; Finding 1 (socialize-debt) has a green simnet PoC.",
     },

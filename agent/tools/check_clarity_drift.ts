@@ -39,8 +39,7 @@ export default defineTool({
     maxCharsPerPage: z.number().int().min(2000).max(200000).default(80000),
   }),
   async execute({ pages, maxCharsPerPage }) {
-    const base =
-      process.env.STACKS_DOCS_BASE ?? "https://docs.stacks.co/reference/clarity";
+    const base = process.env.STACKS_DOCS_BASE ?? "https://docs.stacks.co/reference/clarity";
     const live: Record<string, { ok: boolean; text?: string; error?: string }> = {};
     for (const page of pages) {
       try {

@@ -6,6 +6,9 @@
   "description": "Continuous Stacks asset-safety audit pipeline — a separate project powered by secondlayer (public SDK + hosted Index/Subgraphs/Streams/Subscriptions).",
   "scripts": {
     "poc:finding-1": "bun run simnet/poc/finding-1.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check agent monitoring webhooks simnet subgraphs",
+    "format": "biome check --write agent monitoring webhooks simnet subgraphs",
     "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
     "sandbox:run": "docker run --rm --network none audit-sentinel-simnet:local",
     "dev": "eve dev",

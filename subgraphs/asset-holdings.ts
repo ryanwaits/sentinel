@@ -70,7 +70,8 @@ export default defineSubgraph({
       if (event.recipient) ft(ctx, event.assetIdentifier, event.recipient, a);
     },
     ftMint: (event, ctx) => {
-      if (event.recipient) ft(ctx, event.assetIdentifier, event.recipient, BigInt(event.amount ?? 0));
+      if (event.recipient)
+        ft(ctx, event.assetIdentifier, event.recipient, BigInt(event.amount ?? 0));
     },
     ftBurn: (event, ctx) => {
       if (event.sender) ft(ctx, event.assetIdentifier, event.sender, -BigInt(event.amount ?? 0));

@@ -8,8 +8,7 @@ import { z } from "zod";
  * secondlayer-operated node and prefer the @secondlayer/stacks SDK.
  */
 export default defineTool({
-  description:
-    "Fetch the raw Clarity source of a deployed contract (address.contract-name).",
+  description: "Fetch the raw Clarity source of a deployed contract (address.contract-name).",
   inputSchema: z.object({
     address: z.string().describe("Deployer principal, e.g. SP1A27KFY...BSYADJ7"),
     contractName: z.string().describe("Contract name, e.g. v0-vault-sbtc"),

