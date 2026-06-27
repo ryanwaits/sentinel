@@ -17,6 +17,8 @@
  *      EVE_SESSION_URL (default http://127.0.0.1:3000/eve/v1/session).
  */
 import { verifyWebhookSignature } from "@secondlayer/sdk";
+import { eveAuthEnabled, mintEveSessionToken } from "../monitoring/eve-jwt";
+import { reserve, type Tier } from "../monitoring/spend-ceiling";
 
 const EVE_SESSION_URL = process.env.EVE_SESSION_URL ?? "http://127.0.0.1:3000/eve/v1/session";
 const SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
@@ -27,14 +29,27 @@ type ChainEvent = {
   tx_id?: string;
   block_height?: number;
   contract_id?: string;
+  function_name?: string;
 };
+
+/**
+ * MVP tier = trigger-class policy (governance/proxy-upgrade -> Deep; else Monitor), NOT
+ * TVL-driven (the stakes->tier router needs the asset-holdings subgraph + price feed, M3+).
+ * Defaults to Deep (worst case) when the class is unknown, so the ceiling never under-reserves.
+ */
+function classifyTier(payload: ChainEvent): Tier {
+  const fn = (payload.function_name ?? "").toLowerCase();
+  const monitorish = ["transfer", "deposit", "withdraw"];
+  if (monitorish.some((m) => fn.includes(m))) return "monitor";
+  return "deep";
+}
 
 export async function handle(req: Request): Promise<Response> {
   const raw = await req.text();
-  const headers = Object.fromEntries(req.headers);
+  const reqHeaders = Object.fromEntries(req.headers);
 
   // 1) verify it really came from secondlayer (Standard Webhooks HMAC)
-  if (SECRET && !verifyWebhookSignature(raw, headers, SECRET)) {
+  if (SECRET && !verifyWebhookSignature(raw, reqHeaders, SECRET)) {
     return new Response("bad signature", { status: 401 });
   }
 
@@ -43,14 +58,25 @@ export async function handle(req: Request): Promise<Response> {
   const contractId = payload.contract_id ?? payload.event?.asset_identifier?.split("::")[0];
   if (!contractId) return new Response("no contract in payload", { status: 422 });
 
+  // 3) GLOBAL DAILY SPEND CEILING — reserve the tier's estimated cost BEFORE dispatching, so the
+  //    path is never exposed uncapped. On breach the ceiling pauses + pages; we shed the trigger.
+  const tier = classifyTier(payload);
+  const gate = await reserve(tier);
+  if (!gate.allowed) {
+    return new Response(`spend ceiling: ${gate.reason}`, { status: 429 });
+  }
+
   const message =
     `State change on ${contractId} (${payload.event?.type ?? "event"} @ block ${payload.block_height ?? "?"}, tx ${payload.tx_id ?? "?"}). ` +
     `Re-audit it: fetch source, run the auditor-* subagents, verify findings, reproduce any confirmed high/critical with run_simnet_poc, and report.`;
 
-  // 3) forward to the eve agent (built-in HTTP session endpoint)
+  // 4) forward to the eve agent (built-in HTTP session endpoint), authed with a short-lived
+  //    HMAC JWT so an unauthenticated POST can't force a (budgeted) sweep.
+  const eveHeaders: Record<string, string> = { "content-type": "application/json" };
+  if (eveAuthEnabled()) eveHeaders.authorization = `Bearer ${mintEveSessionToken()}`;
   const res = await fetch(EVE_SESSION_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: eveHeaders,
     body: JSON.stringify({ message }),
   });
   return new Response(res.ok ? "queued" : "eve error", { status: res.ok ? 202 : 502 });
@@ -59,6 +85,10 @@ export async function handle(req: Request): Promise<Response> {
 // Minimal Bun server when run directly.
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
-  Bun.serve({ port, fetch: (req) => (req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 })) });
+  Bun.serve({
+    port,
+    fetch: (req) =>
+      req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 }),
+  });
   console.log(`secondlayer-webhook bridge listening on :${port} -> ${EVE_SESSION_URL}`);
 }
