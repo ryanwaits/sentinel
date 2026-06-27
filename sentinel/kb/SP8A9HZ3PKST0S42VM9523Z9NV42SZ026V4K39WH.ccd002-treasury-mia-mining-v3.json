@@ -1,0 +1,45 @@
+{
+  "contractId": "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd002-treasury-mia-mining-v3",
+  "client": "citycoins-dao",
+  "archetype": "treasury",
+  "closure": [
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.base-dao",
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.extension-trait",
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.proposal-trait",
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd002-trait",
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.stacking-trait"
+  ],
+  "baselineAudited": true,
+  "auditedAt": "2026-06-27",
+  "sensitiveFns": [
+    {
+      "name": "execute",
+      "triggerClass": "governance.proposal_submitted",
+      "callerAllowlist": ["SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.base-dao"]
+    },
+    {
+      "name": "set-extension",
+      "triggerClass": "governance.proxy_upgrade",
+      "callerAllowlist": ["SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.base-dao"]
+    },
+    {
+      "name": "withdraw-stx",
+      "triggerClass": "transfer.outflow",
+      "callerAllowlist": [],
+      "outflowThreshold": { "asset": "stx", "amount": "1000000000000" }
+    },
+    {
+      "name": "withdraw-ft",
+      "triggerClass": "transfer.outflow",
+      "callerAllowlist": []
+    }
+  ],
+  "waivers": [
+    {
+      "finding": "Any extension can register new extensions -> privilege escalation",
+      "label": "by-design",
+      "note": "Refuted as a bug on adversarial verification: extensions are DAO-trusted, added only via a passed proposal or genesis. No untrusted-party exploit. Warn once; do not re-page."
+    }
+  ],
+  "source": "reports/ccd002-treasury-mia-mining-v3.md"
+}

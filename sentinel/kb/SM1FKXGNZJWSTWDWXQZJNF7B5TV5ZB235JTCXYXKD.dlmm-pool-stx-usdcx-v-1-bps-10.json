@@ -1,0 +1,46 @@
+{
+  "contractId": "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-bps-10",
+  "client": "dlmm",
+  "archetype": "amm",
+  "closure": [
+    "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1",
+    "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-pool-trait-v-1-1"
+  ],
+  "baselineAudited": true,
+  "auditedAt": "2026-06-27",
+  "sensitiveFns": [
+    {
+      "name": "set-core-migration-target",
+      "triggerClass": "governance.proxy_upgrade",
+      "callerAllowlist": []
+    },
+    {
+      "name": "swap",
+      "triggerClass": "counterparty.new",
+      "callerAllowlist": []
+    },
+    {
+      "name": "remove-liquidity",
+      "triggerClass": "transfer.outflow",
+      "callerAllowlist": []
+    }
+  ],
+  "waivers": [
+    {
+      "finding": "Cross-bin fungible LP redemption drain",
+      "label": "info",
+      "note": "REFUTED as a false positive on verification (share-accounting)."
+    },
+    {
+      "finding": "Empty-bin no-op active-bin walk -> swap freeze",
+      "label": "low",
+      "note": "Mechanic real, impact wrong; downgraded CRITICAL -> LOW on verification."
+    },
+    {
+      "finding": "bin-price product overflow -> DoS",
+      "label": "info",
+      "note": "REFUTED for this pool's factor tables."
+    }
+  ],
+  "source": "reports/dlmm-pool-stx-usdcx-v-1-bps-10.md"
+}
