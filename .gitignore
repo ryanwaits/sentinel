@@ -15,5 +15,8 @@ simnet/history.json
 # eve durable runtime state
 .workflow-data/
 
+# sentinel durable run sink (M0 spike; M2 swaps for external KV)
+.sentinel/
+
 # account-personal project binding
 .secondlayer/

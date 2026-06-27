@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": []
+    "types": ["node", "bun"]
   },
-  "include": ["agent/**/*.ts", "subgraphs/**/*.ts", "webhooks/**/*.ts", "simnet/**/*.ts"]
+  "include": ["agent/**/*.ts", "monitoring/**/*.ts", "subgraphs/**/*.ts", "webhooks/**/*.ts", "simnet/**/*.ts"]
 }
