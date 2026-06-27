@@ -44,22 +44,28 @@ verified-binding server). Eager server-side persist-on-completion is unavailable
 the replayable stream instead. Likely the emit composer only runs under `eve dev`/TUI — worth
 confirming upstream. See memory `eve-headless-run-readout`.
 
-## M1 — Static foundation, no chain dependency (M)
+## M1 — Static foundation, no chain dependency (M) — **DONE (2026-06-27)**
 **Goal:** the judgment artifacts that everything downstream reads, buildable offline.
-**Work:**
-- **MonitoringConfig** schema (zod-v4) + **KB/context store** (JSON dir keyed by
-  `contractId`), both seeded from `reports/ccd002-…` + `reports/dlmm-…`.
-- `deriveConfig(contractId)` helper (KB → config: sensitive fns, allowlists, thresholds,
-  class→tier, route).
-- `fetch_contract_source` → repoint at the secondlayer Index node (drop Hiro fallback —
-  hard rule); add **static call-graph dependency-closure** resolution (a target + every
-  `(contract-call? …)` it reaches).
-**Exit:** `deriveConfig` emits a valid config from a seeded report; closure fetch on a
-known proposal returns the proposal + its reachable contracts (incl. an indirection M).
-**Deps:** none (chain reads are read-only, no new infra).
-**secondlayer feedback:** confirms the **published source-read surface** is sufficient to
-fetch source by `contractId` (it is today via Hiro/Index); if the Index source endpoint
-has gaps for closure-walking, note it — but no f043/f044 change expected.
+**Work + outcome:**
+- **MonitoringConfig** schema (zod-v4, **`monitoring/config.ts`**) + **KB store**
+  (**`monitoring/kb.ts`**, git-checked JSON under `sentinel/kb/`), seeded from both reports
+  (**`sentinel/kb/*.json`**). `deriveConfig(contractId)` maps KB → config (sensitive fns,
+  allowlists, thresholds, archetype→tier via `tierForArchetype`, closure, route). Proven:
+  CCD002 treasury → `deep`, DLMM → `monitor`; unknown id throws.
+- **Static call-graph closure** (**`monitoring/closure.ts`**): `resolveClosure(rootId, fetchSource)`
+  walks `(contract-call? …)` + `use-trait`/`impl-trait` + literal principals + `.name` local
+  sugar, depth-bounded, comment-stripped. Proven on a synthetic **proposal-by-indirection** case
+  (root + separate M-impl + transitive leaf + local helper captured; commented/trait-only refs
+  excluded).
+- **`fetch_contract_source`** repointed: silent Hiro default removed (requires `STACKS_NODE_URL` →
+  secondlayer node, hard rule); added `closure=true` to fetch target + reachable closure.
+**Exit:** ✅ `deriveConfig` valid from seed; closure returns proposal + reachable incl. indirection.
+**Deps:** none (chain reads read-only).
+**secondlayer feedback (open):** the live closure fetch needs `STACKS_NODE_URL` pointed at the
+secondlayer node serving the standard `/v2/contracts/source` RPC — **confirm secondlayer exposes
+it (or an equivalent source-by-`contractId` endpoint) with the API key**; if the Index source
+surface has gaps for closure-walking, log against the source-read surface. Resolver itself is
+chain-agnostic (injected fetcher), so only the wiring is gated on this.
 
 ## M2 — Provisioning: config → live subscription (M)
 **Goal:** one real secondlayer subscription, reconciled from config, delivering to the bridge.
