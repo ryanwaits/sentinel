@@ -1,18 +1,39 @@
-# Product model — Audit + Monitor (two modes, one platform)
+# Product model — Sentinel: audit-informed, context-aware, Stacks-native monitoring
 
-Aligning the product shape (confirmed 2026-06-27). The offering is **two distinct
-products that share one engine + KB**, not one pipeline. Conflating them undersells the
-recurring half.
+Aligning the product shape (confirmed 2026-06-27). Sentinel is **ONE focused product —
+continuous security monitoring for Stacks smart contracts.** The deep-**audit engine is a
+tiered, triggerable *capability* inside it**, not a co-equal sibling product. Audit is how
+Sentinel understands contracts well enough to watch them intelligently; monitoring is what
+makes it a product. The wedge: **audit-informed, context-aware, Stacks-native monitoring**
+— vs. one-off human auditors (hand you a PDF and leave) and generic chain-alerting (dumb;
+doesn't know your contract). Below: Audit (the capability) then Monitor (the product).
 
 ## 1. Audit — point-in-time assurance ("is the code safe?")
 Static analysis of contract code: the 8-dimension auditor fan-out → adversarial verify
 → reproduce-before-ship PoC. Honest bug-vs-centralization labeling.
-- **When:** pre-launch, on major upgrade, on-demand deep, onboarding. *Infrequent* —
-  contracts rarely change.
+- **When:** onboarding, pre-launch, on major upgrade, on-demand deep — AND **reactively,
+  fired by monitoring triggers** (see "Audit-on-trigger" below). It's a capability, not a
+  calendar event.
 - **Output:** report + verified findings + green PoCs **+ the protocol's "safety model"**
   — privileged fns, trust assumptions, invariants, the dependency/extension graph. This
   artifact is the seed for Monitor.
-- **Pricing:** one-off (Deep / Launch tier; see business-model.md service tiers).
+- **Pricing:** depth is a dial within the subscription; standalone Deep/Launch audits for
+  non-subscribers (see business-model.md service tiers). Cost ≈ **~$2/sweep** (tiered),
+  which is what makes reactive auditing viable.
+
+### Audit-on-trigger — the fusion (cheap audit as a reactive monitoring primitive)
+Because a full sweep is ~$2, the monitoring layer can **fire audit-grade analysis
+reactively**, not just at milestones. This is the killer feature that fuses the two halves:
+- **Governance proposal submitted** → audit the proposal contract *during the timelock,
+  before it executes* (directly defeats the Beanstalk/Charisma malicious-proposal class).
+- **Upgrade / impl-swap detected** → auto-audit the new code; alert on new findings. (The
+  legitimate, valuable version of "re-audit on change" — a triggered feature, not the core.)
+- **New contract authorized or interacting** (incl. ninja contracts) → audit the
+  counterparty; flag if hostile.
+- **Behavioral alert raised** → audit-grade adjudication of the involved contracts: real
+  threat vs noise.
+Tier by stakes: routine/frequent triggers run Monitor-tier (Sonnet auditors); high-stakes
+triggers (a live proposal over a $20M treasury) run Deep-tier (all-Opus).
 
 ## 2. Monitor — continuous behavioral surveillance ("is something dangerous happening NOW?")
 **NOT re-auditing code on change** (that's the weak framing — code is static most of the

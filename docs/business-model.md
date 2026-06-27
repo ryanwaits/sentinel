@@ -62,10 +62,18 @@ post-sBTC. → On Stacks alone the TAM is thin.
 reproduce-first *methodology* (portable to other Clarity chains; pattern
 generalizes). Don't over-invest assuming Stacks-only is a big business.
 
-## Two products, one platform
-The offering is **Audit** (point-in-time code assurance: pre-launch / on-upgrade) +
-**Monitor** (continuous *behavioral* surveillance of live activity, NOT re-audit-on-change).
-Monitor is the recurring moat — see [monitoring.md](./monitoring.md). Revenue maps to these.
+## One product: Sentinel (security monitoring); audit is a capability within it
+Sentinel is a **single, focused product — continuous security monitoring for Stacks
+smart contracts.** The deep-**audit engine is a tiered, *triggerable* capability inside
+it**, not a sibling offering. Run it at onboarding / pre-launch / on-upgrade / on-demand
+(Deep tier) — and, because a full sweep is only ~$2, fire it **reactively from monitoring
+triggers**: a governance proposal submitted (audit it *during the timelock, before it
+executes*), an upgrade/impl-swap detected (audit the new code), a new contract authorized
+or interacting (audit the counterparty), or a behavioral alert raised (audit-grade
+adjudication: real threat vs noise). Audit is how Sentinel *understands* contracts well
+enough to watch them intelligently, and the highest-assurance pass on demand. The
+recurring product is the monitoring subscription; audit depth + trigger frequency is a
+dial within it. See [monitoring.md](./monitoring.md).
 
 ## Revenue streams (ranked by quality)
 

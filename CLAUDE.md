@@ -1,11 +1,17 @@
 # audit-sentinel — project instructions
 
-Continuous Stacks asset-safety audit pipeline. **Separate project, powered by
-secondlayer** (a dependency, not a parent). Own release cadence, license, business.
+**Sentinel — audit-informed, context-aware, Stacks-native security monitoring** for
+smart contracts. ONE focused product (continuous monitoring); the multi-agent **audit
+engine is a tiered, triggerable capability inside it** (pre/post-launch, on-upgrade,
+on-demand, and fired reactively from monitoring triggers — a full sweep is ~$2). See
+[docs/monitoring.md](./docs/monitoring.md). **Separate project, powered by secondlayer**
+(a dependency, not a parent). Own release cadence, license, business.
 
-Pipeline: discover value-holding Clarity contracts → prioritize by TVL × risk →
-audit (multi-agent) → adversarially verify → **reproduce exploit in sandbox** →
-monitor (chain webhooks) → act (disclosure/bounty/salvage, human-gated).
+Audit engine: discover value-holding Clarity contracts → prioritize by TVL × risk →
+audit (multi-agent, model-tiered) → adversarially verify → **reproduce exploit in
+sandbox** → report (honest bug-vs-centralization). Monitoring (the product): continuous
+behavioral surveillance scoped to the client KB, secondlayer-powered, alert/trigger
+driven → act (disclosure/escalation, human-gated).
 
 Agent operating guide: see [AGENTS.md](./AGENTS.md). **Sequence + status:
 [docs/roadmap.md](./docs/roadmap.md).** Strategy docs:
