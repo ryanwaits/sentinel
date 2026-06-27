@@ -61,11 +61,14 @@ confirming upstream. See memory `eve-headless-run-readout`.
   secondlayer node, hard rule); added `closure=true` to fetch target + reachable closure.
 **Exit:** ✅ `deriveConfig` valid from seed; closure returns proposal + reachable incl. indirection.
 **Deps:** none (chain reads read-only).
-**secondlayer feedback (open):** the live closure fetch needs `STACKS_NODE_URL` pointed at the
-secondlayer node serving the standard `/v2/contracts/source` RPC — **confirm secondlayer exposes
-it (or an equivalent source-by-`contractId` endpoint) with the API key**; if the Index source
-surface has gaps for closure-walking, log against the source-read surface. Resolver itself is
-chain-agnostic (injected fetcher), so only the wiring is gated on this.
+**secondlayer feedback (RESOLVED + new primitive idea):** contract source is a node RPC read, not
+an Index/subgraph surface (`api.secondlayer.tools` 404s `/v2/contracts/source`). Our hosted
+stacks-node serves it: `STACKS_NODE_URL=http://37.27.171.220:20443`. Proven live — closure on the
+CCD002 treasury returns the real 8-contract graph (base-dao + 6 traits), a superset of the
+hand-seeded KB closure. **Idea logged:** a hosted, TLS'd, **cached `source`/`ABI`-by-`contractId`
+endpoint on the Index** is a clean generic DOWN primitive — fixes the raw-IP/no-TLS access and
+serves any consumer. Source is immutable, so it's a read-through cache (not a subgraph). UP side:
+eager KB derivation (ABI + sensitive-fn AST + closure) at client onboarding. See feedback log.
 
 ## M2 — Provisioning: config → live subscription (M)
 **Goal:** one real secondlayer subscription, reconciled from config, delivering to the bridge.
@@ -145,6 +148,7 @@ unwieldy, i.e. multiple clients) → incident-corpus auto-refresh.
 The whole point: build Sentinel, let it drive f043/f044 adjustments. Capture findings here.
 | Milestone | What it tests on the secondlayer side | Expected adjustment |
 |---|---|---|
+| M1 | Source-read surface for closure-walking (RESOLVED: node RPC `:20443`) | **New DOWN primitive:** hosted, TLS'd, cached `source`/`ABI`-by-`contractId` endpoint on the Index (read-through cache, not a subgraph) — fixes raw-IP access, generic to any consumer |
 | M2 | Subscription CRUD completeness; `ruleKey`-in-`name`; N-sub reconciliation pain | f043 watchlist scope + any CRUD/`/test`/`/rotate-secret` gaps |
 | M3 | Caller-allowlist filter semantics + real webhook volume | f044 exact filter shape; whether/when it's worth shipping |
 | M5 | Confirmed-block latency vs timelock window; any instant-attack class | f043 mempool-push priority (defer vs pull forward) |
