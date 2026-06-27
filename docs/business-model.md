@@ -82,12 +82,18 @@ product as we approach it — revisit after validation.
 - **Bounties:** industry norm ~5–10% of funds at risk (Immunefi-style caps).
 - **Salvage:** ~10% whitehat fee (common norm).
 
-### Unit economics — COGS (measured 2026-06-26, approximate)
-First real measurement via the Vercel AI-Gateway dashboard: **$18.27 / 3.2M tokens /
-143 requests** across ~4–5 full-ish agent sweeps (track-A validation runs on the
-1046-line Zest vault, 8-dimension-capable). → a single full sweep ≈ **~$3–4 and
-~650–800k tokens** (Opus 4.8 via gateway). Caveat: mixed with partial runs + probes;
-isolate a clean run via the gateway Observability/Log view for a precise figure.
+### Unit economics — COGS (measured, gateway dashboard)
+- **All-Opus, ~7-dim sweep (track-A, Zest 1046-line vault, 2026-06-26):** ~$18.27 /
+  3.2M tokens across ~4–5 full-ish runs → ≈ **$3–4/sweep** (approx; mixed w/ probes).
+- **Tiered, 3-dim sweep (CCD002 MIA treasury, 2026-06-27): $1.84 total** / 313K tokens
+  / 17 requests. Model split: **Opus (verifier + orchestrator) ~$0.91+, Sonnet (3
+  auditors) ~$0.20.** → the Opus verify/orchestrate path is now ~80% of spend; the
+  cheap Sonnet auditors are ~$0.20. A full 8-dim tiered sweep extrapolates to ~$3–5
+  (more auditors stay cheap; more Opus verifier calls drive cost).
+
+**Takeaway:** ~$2–5 to adversarially audit a $10–20M contract vs. a $15–40k human
+audit. COGS is the cost center for *quality* (Opus verify), not breadth (Sonnet
+auditors). Trivial vs retainer at any sane cadence; the moat stays method + PoC corpus.
 
 **Implication:** COGS is trivial vs the retainer. Weekly re-audits ≈ ~$12–16/mo
 compute; daily ≈ ~$90–120/mo — **sub-1% of a ~$2–8k/mo retainer even at daily
