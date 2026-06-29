@@ -17,14 +17,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Poll until the run leaves "running" (or timeout); returns the last-known result regardless. */
 export async function watchRun(
   sessionId: string,
-  opts: { baseUrl?: string; intervalMs?: number; timeoutMs?: number } = {},
+  opts: { baseUrl?: string; intervalMs?: number; timeoutMs?: number; readMs?: number } = {},
 ): Promise<RunResult> {
-  const intervalMs = opts.intervalMs ?? 5000;
+  const intervalMs = opts.intervalMs ?? 8000;
+  // Replay window per poll — a long run's stream grows large, so 8s often can't drain it before
+  // aborting (it then reads as 0-step/running). 25s reaches the terminal boundary on big streams.
+  const readMs = opts.readMs ?? 25000;
   const deadline = Date.now() + (opts.timeoutMs ?? 15 * 60 * 1000);
-  let last = await readRun(sessionId, { baseUrl: opts.baseUrl, timeoutMs: 8000 });
+  let last = await readRun(sessionId, { baseUrl: opts.baseUrl, timeoutMs: readMs });
   while (last.status === "running" && Date.now() < deadline) {
     await sleep(intervalMs);
-    last = await readRun(sessionId, { baseUrl: opts.baseUrl, timeoutMs: 8000 });
+    last = await readRun(sessionId, { baseUrl: opts.baseUrl, timeoutMs: readMs });
   }
   return last;
 }

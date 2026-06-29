@@ -2,8 +2,11 @@ import { defineAgent } from "eve";
 
 /**
  * Audit Sentinel — orchestrator agent.
- * Opus 4.8 confirmed supported by eve via the Vercel AI Gateway (spike Q4).
+ *
+ * Model is env-driven (read at `eve build` time): SENTINEL_AGENT_MODEL overrides the default so a
+ * Monitor-tier / fast-validation build can use Sonnet without editing code. Default = Opus 4.8 (the
+ * Deep-tier model, confirmed supported by eve via the Vercel AI Gateway).
  */
 export default defineAgent({
-  model: "anthropic/claude-opus-4.8",
+  model: process.env.SENTINEL_AGENT_MODEL ?? "anthropic/claude-opus-4.8",
 });
