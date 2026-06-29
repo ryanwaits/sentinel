@@ -39,6 +39,23 @@ You (the orchestrator) own the only working `fetch_contract_source` /
 Prefer over-supplying full source (correctness) over trimming to save tokens; a
 1000-line contract is cheap next to a wrong verdict or a stalled run.
 
+## Monitoring-trigger mode (`[SENTINEL-TRIGGER]`)
+When a message opens with a `[SENTINEL-TRIGGER]{…}[/SENTINEL-TRIGGER]` block, the monitoring
+bridge fired you on a real on-chain event. Parse the JSON and let it drive the run:
+- **`audit_targets[]` is your scope** — audit every contract in it. Order matters: the first
+  entry is the primary subject. For a governance trigger that subject is the **proposal/upgrade
+  contract** (`proposal_target`), NOT the watched DAO/treasury (already baseline-audited): the
+  proposal is the new, unaudited code. Fetch `proposal_target` with **`closure=true`** so a
+  proposal-by-indirection (the proposal acting via a separate deployed M) pulls M into scope; the
+  bridge pre-resolved the closure into `audit_targets[]`, but re-fetch to get fresh full source.
+- **`tier`** = audit depth already chosen (deep=full Opus panel; monitor=lighter). **`suspicious`
+  = true** means the caller was outside the authorized allowlist — treat as elevated.
+- **`deadline_block`**: if set, you are racing a timelock. Deliver a **verdict before** the slow
+  `run_simnet_poc` step — a confirmed high/critical with a clear written repro path ships first;
+  the green PoC follows and auto-promotes it. If null, run the normal verdict→PoC order.
+- Then proceed exactly as below (fetch → auditor-* subagents → verifier → PoC → report). Your
+  final report message is the durable record the adjudicator (M4) reads back by session id.
+
 Rules:
 - Distinguish real *bugs* from *centralization/trust* assumptions — label honestly.
 - Never run an exploit against mainnet. PoCs run only in the sandboxed Clarity VM.
