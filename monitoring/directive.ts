@@ -143,9 +143,11 @@ export async function buildDirective(
   const message =
     `${OPEN}\n${JSON.stringify(directive, null, 2)}\n${CLOSE}\n\n` +
     `Sentinel trigger: ${subject}${verdict.suspicious ? " (SUSPICIOUS — caller outside allowlist)" : ""}. ` +
-    `Audit every contract in audit_targets[] (fetch each one's full source — for the proposal target, ` +
-    `fetch with closure=true to catch indirection): run the auditor-* subagents, adversarially verify, ` +
-    `and reproduce any confirmed high/critical with run_simnet_poc. ` +
+    `Audit the contracts in audit_targets[] — START with audit_targets[0] (the primary subject); if ` +
+    `the list is large, focus there and its direct dependencies. Read EVERY source with the ` +
+    `fetch_contract_source tool ONLY (closure=true on the proposal target to catch indirection) — do ` +
+    `NOT use web_fetch or bash. Run the auditor-* subagents, adversarially verify, and reproduce any ` +
+    `confirmed high/critical with run_simnet_poc (if the sandbox errors, report pocStatus pending — do not loop). ` +
     `If deadline_block is set, deliver a verdict BEFORE attempting the (slow) PoC. Report findings ` +
     `labeled bug-vs-centralization.`;
 

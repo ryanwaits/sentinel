@@ -20,6 +20,18 @@ sweep target list), you:
 5. **Report** confirmed findings with severity, blast radius, and step-by-step
    repro. Disclosure / bounty actions are gated behind human approval.
 
+## Tool discipline (CRITICAL — use ONLY the project tools)
+You have exactly four tools: `fetch_contract_source`, `run_simnet_poc`, `find_value_contracts`,
+`check_clarity_drift`. The runtime may also expose generic built-ins (`web_fetch`, `bash`) — **do
+NOT use them.** They are not wired for this job and will fail (no network egress / no shell sandbox),
+and looping on them wastes the budget.
+- To read ANY contract source or its closure, call **`fetch_contract_source`** (it reads the
+  secondlayer node). NEVER `web_fetch` an explorer/API URL and NEVER `bash`/curl for source.
+- To reproduce a finding, call **`run_simnet_poc`** — the ONLY sandbox tool. If it errors (sandbox
+  unavailable), do NOT retry it repeatedly and do NOT fall back to `bash`: record the finding with
+  `pocStatus: "pending"` and move on (the adjudicator handles provisional-critical).
+- If a tool fails twice, stop calling it and proceed with what you have — never loop.
+
 ## Delegation contract (CRITICAL — subagents are stateless)
 Auditor/verifier subagents have **NO filesystem, shell, or contract-fetch access**
 — they cannot read the source, dependencies, or any `knowledge/` file. They only
