@@ -70,22 +70,35 @@ endpoint on the Index** is a clean generic DOWN primitive — fixes the raw-IP/n
 serves any consumer. Source is immutable, so it's a read-through cache (not a subgraph). UP side:
 eager KB derivation (ABI + sensitive-fn AST + closure) at client onboarding. See feedback log.
 
-## M2 — Provisioning: config → live subscription (M)
+## M2 — Provisioning: config → live subscription (M) — **SURFACE MAPPED; build next**
 **Goal:** one real secondlayer subscription, reconciled from config, delivering to the bridge.
-**Work:**
-- Provisioner reconciler: deterministic `ruleKey` in subscription `name`; diff desired vs
-  live (`GET /api/subscriptions`) → POST/PATCH/DELETE. MVP target: `contract_call(<DAO>,
-  "propose")`.
-- Durable external KV for sub IDs + signing secrets + `ruleKey→config`.
-- **Offboarding** path (config removal → DELETE sub + rotate secret + purge KV).
-- `POST /:id/test` smoke-verifies wiring end-to-end.
-**Exit:** a config entry creates/reconciles a real subscription; `/test` delivers a signed
-webhook to the bridge URL; removing the entry tears it down cleanly; re-running is idempotent.
-**Deps:** M0 (durable-state decision overlaps the KV).
-**secondlayer feedback (key):** hand-building N-subscription reconciliation is the usage
-that defines **f043 watchlist provisioning** — it reveals the exact collapse (N creates →
-1) + any **subscription-CRUD gaps** (does PATCH/`/test`/`/rotate-secret` exist as assumed?
-is `name` a safe place for `ruleKey`?). Log gaps against f043; adjust that plan.
+**Surface discovered (CLI v8.12.0; account ryan.waits, plan launch):** subscriptions ride a
+**subgraph table** + **positive** filter + webhook HMAC. `sl subscriptions create <name>
+-s <subgraph> -t <table> -u <bridgeUrl> --filter contract_id.eq=<DAO> function_name.eq=propose
+--no-scaffold`. Full CRUD present: `create/list/get/update/pause/resume/delete/rotate-secret/
+test/deliveries/dead/requeue/replay/doctor`. `test --post` = server-logged delivery (the smoke).
+CLI auth needs `--api-key`/`SL_API_KEY` (not `SECONDLAYER_API_KEY`). Existing subgraphs:
+`pox-stacking` has a `calls` table (precedent). See memory `secondlayer-m2-surface`.
+**Decided approach (one shared calls-subgraph):** deploy ONE `sentinel-calls` subgraph indexing
+contract_calls for the (small) watched-contract set into a `calls` table; one subscription per
+sensitive-fn filtered by `contract_id.eq + function_name.eq` → bridge. (Clients have few contracts,
+so one subgraph + N subscriptions beats per-contract subgraphs.)
+**Work (next session):**
+- Author `subgraphs/sentinel-calls.ts` (template off `subgraphs/asset-holdings.ts`) → `calls`
+  table; deploy via `sl subgraphs deploy`.
+- Provisioner reconciler: deterministic `ruleKey` in subscription `name`; diff desired
+  (`deriveConfig` sensitive fns) vs `subscriptions list` → create/update/delete (REST or `sl`).
+- Durable KV for sub IDs + signing secrets + `ruleKey→config` (reuse the `.sentinel/` seam,
+  swap to external KV per M2/M0 note).
+- **Offboarding** (config removal → delete sub + rotate secret + purge KV); `test --post` smoke.
+- ⚠️ Creates REAL billable infra on the account — confirm before side-effecting calls.
+**Exit:** a config entry creates/reconciles a real subscription; `test --post` delivers a signed
+webhook to the bridge; removing the entry tears it down; re-running is idempotent.
+**Deps:** M0 (durable-state seam), M1 (`deriveConfig` sensitive fns).
+**secondlayer feedback (banked):** filters are **positive-only (no set-membership/negation)** →
+caller-allowlist pre-filter stays client-side in the bridge — **confirms the f044 negative-caller
+primitive**. No CRUD gaps (PATCH=`update`, `rotate-secret`, `test`, `pause` all exist; `name`
+usable for `ruleKey`). N-sub reconciliation pain still feeds **f043 watchlist** (N creates → 1).
 
 ## M3 — The audit-on-trigger bridge (L — the core)
 **Goal:** webhook → filtered, budgeted, tiered audit on the right targets → report in the sink.
