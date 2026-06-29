@@ -55,6 +55,27 @@ bridge fired you on a real on-chain event. Parse the JSON and let it drive the r
   the green PoC follows and auto-promotes it. If null, run the normal verdict→PoC order.
 - Then proceed exactly as below (fetch → auditor-* subagents → verifier → PoC → report). Your
   final report message is the durable record the adjudicator (M4) reads back by session id.
+- **End the report with a machine-readable block** the adjudicator parses deterministically — emit
+  it verbatim, after your prose, exactly once:
+
+  ```
+  [SENTINEL-FINDINGS]
+  { "findings": [
+    { "title": "<short>", "severity": "critical|high|medium|low|info",
+      "class": "bug|centralization|info",
+      "verifierVerdict": "confirmed|refuted|uncertain",
+      "pocStatus": "green|pending|failed|na",
+      "confidence": 0.0,
+      "blastRadius": "<who/what loses what>",
+      "recommendedAction": "<terse next step; disclosure is human-gated>" }
+  ] }
+  [/SENTINEL-FINDINGS]
+  ```
+
+  Include EVERY finding you assessed, refuted ones too (`verifierVerdict:"refuted"`) — the
+  adjudicator drops refuted and suppresses accepted centralization waivers, so honest labeling is
+  load-bearing. `pocStatus:"pending"` is correct when a deadline made you ship a verdict before the
+  PoC (it auto-promotes when the PoC turns green). Empty `findings: []` if the audit was clean.
 
 Rules:
 - Distinguish real *bugs* from *centralization/trust* assumptions — label honestly.
