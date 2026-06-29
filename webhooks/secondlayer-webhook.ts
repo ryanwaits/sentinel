@@ -1,38 +1,47 @@
 /**
- * secondlayer subscription -> eve  (HTTP webhook ingress bridge)
+ * secondlayer subscription -> eve  (HTTP webhook ingress bridge — the audit-on-trigger core, M3)
  *
- * A secondlayer CHAIN subscription POSTs here when a watched, value-holding contract changes
- * state (contract_call on an admin fn, large ft_transfer, contract_deploy by the same team, …).
- * We verify the Standard-Webhooks signature, map the decoded chain event to an audit request, and
- * forward it to the eve agent's built-in HTTP session endpoint — re-auditing on every meaningful
- * change.
+ * A secondlayer CHAIN subscription POSTs a decoded chain event here. The bridge:
+ *   1. verifies the Standard-Webhooks signature (per-subscription secret, resolved by the ruleKey
+ *      in the URL path);
+ *   2. drops reorg rollbacks + de-duplicates re-deliveries / replays;
+ *   3. loads the watched contract's MonitoringConfig and runs the consumer PRE-FILTER — benign
+ *      events are logged + 204'd with ZERO spend;
+ *   4. for a notable event, builds the audit_targets[] (decoded proposal + its live closure for
+ *      governance; the watched contract + KB closure for context) and a [SENTINEL-TRIGGER]
+ *      directive;
+ *   5. reserves the tier's estimated cost against the daily spend ceiling BEFORE dispatching;
+ *   6. routes to the tier's eve deployment (Deep=Opus / Monitor=Sonnet), captures the session id,
+ *      and records trigger→session metadata for M4 adjudication.
+ * The server owns retry/backoff/dead-letter; the bridge just stays idempotent and returns 2xx.
  *
- * Lives OUTSIDE agent/ so eve's channel discovery doesn't try to compile it as a native channel.
- * Once eve's `defineChannel` route API stabilizes, this collapses into agent/channels/secondlayer.ts.
- * Run as a tiny Bun/Vercel function:
+ * Lives OUTSIDE agent/ so eve's channel discovery doesn't compile it as a native channel. Run as a
+ * tiny Bun/Vercel function:  bun run webhooks/secondlayer-webhook.ts   (PORT=3001 by default)
  *
- *   bun run webhooks/secondlayer-webhook.ts   (PORT=3001 by default)
- *
- * URL scheme: the provisioner registers each subscription with `url = <BRIDGE_BASE_URL>/<ruleKey>`,
- * so the path segment IS the ruleKey. The bridge resolves the per-subscription signing secret from
- * the durable sub-store by that ruleKey (env SECONDLAYER_WEBHOOK_SECRET is the single-sub fallback).
- *
- * Env: EVE_SESSION_URL (default http://127.0.0.1:3000/eve/v1/session),
- *      SECONDLAYER_WEBHOOK_SECRET (fallback signing secret when no per-ruleKey record exists).
+ * Env: EVE_SESSION_URL (fallback), EVE_DEEP_SESSION_URL / EVE_MONITOR_SESSION_URL (tier routing),
+ *      SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret).
  */
 import { verifyWebhookSignature } from "@secondlayer/sdk";
+import { buildDirective, tierFor } from "../monitoring/directive";
 import { eveAuthEnabled, mintEveSessionToken } from "../monitoring/eve-jwt";
+import { deriveConfig } from "../monitoring/kb";
+import { type ChainEventBody, classify } from "../monitoring/prefilter";
 import { reserve, type Tier } from "../monitoring/spend-ceiling";
 import { getByRuleKey } from "../monitoring/sub-store";
+import { commitDispatch, dedupKey, inDebounce, isDuplicate } from "../monitoring/trigger-state";
 
-const EVE_SESSION_URL = process.env.EVE_SESSION_URL ?? "http://127.0.0.1:3000/eve/v1/session";
 const FALLBACK_SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
+const FALLBACK_SESSION_URL = process.env.EVE_SESSION_URL ?? "http://127.0.0.1:3000/eve/v1/session";
 
-/**
- * The decoded chain-subscription envelope (Standard Webhooks body). The triggering contract +
- * function live under `event.*` — NOT at the top level. `action` is "apply" on a canonical block
- * and "rollback" when a reorg orphans a previously-delivered tx.
- */
+/** Pick the eve deployment for a tier (Deep=Opus / Monitor=Sonnet); fall back to the single URL. */
+function sessionUrlForTier(tier: Tier): string {
+  if (tier === "deep") return process.env.EVE_DEEP_SESSION_URL ?? FALLBACK_SESSION_URL;
+  return process.env.EVE_MONITOR_SESSION_URL ?? FALLBACK_SESSION_URL;
+}
+
+const GOVERNANCE_CLASSES = ["governance.proposal_submitted", "governance.proxy_upgrade"];
+
+/** The decoded chain-subscription envelope. The event is under `event.*`, NOT top-level. */
 type ChainWebhook = {
   action?: "apply" | "rollback";
   trigger?: string;
@@ -40,110 +49,184 @@ type ChainWebhook = {
   block_height?: number;
   tx_id?: string;
   canonical?: boolean;
-  event?: {
-    type?: string;
-    contract_id?: string;
-    function_name?: string;
-    function_args?: string[];
-    sender?: string;
-    status?: string;
-    result_hex?: string;
-    asset_identifier?: string;
-  };
+  event?: ChainEventBody;
 };
 
 /**
- * MVP tier = trigger-class policy (governance/proxy-upgrade -> Deep; else Monitor), NOT TVL-driven
- * (the stakes->tier router needs the asset-holdings subgraph + price feed, M3+). Defaults to Deep
- * (worst case) when the fn is unknown, so the ceiling never under-reserves.
- */
-function classifyTier(ev: ChainWebhook["event"]): Tier {
-  const fn = (ev?.function_name ?? "").toLowerCase();
-  const monitorish = ["transfer", "deposit", "withdraw"];
-  if (monitorish.some((m) => fn.includes(m))) return "monitor";
-  return "deep";
-}
-
-/**
- * Idempotency: Standard Webhooks retries carry a STABLE `webhook-id` header. The server owns
- * retry/backoff/dead-letter; the bridge just stays idempotent + returns 2xx. In-memory dedup is the
- * MVP — bounded so a long-lived process can't leak; swap for the durable sub-store / external KV in
- * prod alongside the sub records.
+ * Durable event dedup (tx-based) covers re-delivery; this in-memory set short-circuits an obvious
+ * retry of an ALREADY-HANDLED delivery (same webhook-id). Marked only on definitive handling — NOT
+ * on transient failure (429/502) so the server's retry can re-drive. Bounded; durable swap in prod.
  */
 const SEEN_CAP = 5000;
-const seen = new Set<string>();
-function markSeen(id: string): boolean {
-  if (seen.has(id)) return true;
-  if (seen.size >= SEEN_CAP) seen.clear();
-  seen.add(id);
-  return false;
+const handledWebhookIds = new Set<string>();
+function alreadyHandled(id: string | undefined): boolean {
+  return Boolean(id && handledWebhookIds.has(id));
+}
+function markHandled(id: string | undefined): void {
+  if (!id) return;
+  if (handledWebhookIds.size >= SEEN_CAP) handledWebhookIds.clear();
+  handledWebhookIds.add(id);
 }
 
 /** Resolve the ruleKey from the request path (`/<ruleKey>`), URL-decoded. */
 function ruleKeyFromPath(url: string): string {
-  const path = new URL(url).pathname.replace(/^\/+/, "");
-  return decodeURIComponent(path);
+  return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ""));
+}
+
+/** Dispatch the directive to eve and return the created session id (best-effort capture). */
+async function dispatchToEve(
+  message: string,
+  tier: Tier,
+): Promise<{ ok: boolean; sessionId: string | null; status: number }> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (eveAuthEnabled()) headers.authorization = `Bearer ${mintEveSessionToken()}`;
+  const res = await fetch(sessionUrlForTier(tier), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message }),
+  });
+  let sessionId: string | null = null;
+  const bodyText = await res.text().catch(() => "");
+  try {
+    const body = JSON.parse(bodyText) as Record<string, unknown>;
+    const session = body.session as Record<string, unknown> | undefined;
+    sessionId =
+      (body.sessionId as string) ?? (body.id as string) ?? (session?.id as string) ?? null;
+  } catch {
+    // non-JSON body
+  }
+  // Fallback: a Location header like /eve/v1/session/<id>.
+  if (!sessionId) {
+    const loc = res.headers.get("location");
+    if (loc) sessionId = loc.split("/").filter(Boolean).pop() ?? null;
+  }
+  return { ok: res.ok, sessionId, status: res.status };
 }
 
 export async function handle(req: Request): Promise<Response> {
   const raw = await req.text();
   const reqHeaders = Object.fromEntries(req.headers);
+  const webhookId = reqHeaders["webhook-id"];
 
-  // 1) verify it really came from secondlayer (Standard Webhooks HMAC). Secret is resolved by the
-  //    ruleKey in the URL path; env fallback covers a single-sub setup / pre-reconciler smoke.
+  // 1) verify (per-ruleKey secret from KV; env fallback for a single-sub setup).
   const ruleKey = ruleKeyFromPath(req.url);
   const secret = getByRuleKey(ruleKey)?.signingSecret ?? FALLBACK_SECRET;
   if (secret && !verifyWebhookSignature(raw, reqHeaders, secret)) {
     return new Response("bad signature", { status: 401 });
   }
 
-  // 2) idempotency — a retried delivery (same webhook-id) is a no-op 2xx.
-  const webhookId = reqHeaders["webhook-id"];
-  if (webhookId && markSeen(webhookId)) {
-    return new Response("duplicate", { status: 200 });
-  }
+  // 2) short-circuit an already-handled delivery retry.
+  if (alreadyHandled(webhookId)) return new Response("duplicate", { status: 200 });
 
   const payload = JSON.parse(raw) as ChainWebhook;
 
-  // 3) reorg — an orphaned tx must NOT fire an audit. Acknowledge + drop (real retraction of any
-  //    in-flight adjudication is M3/M4). Server delivers up to 500 orphans per rollback.
+  // 3) reorg — an orphaned tx must NOT fire an audit (real retraction of an in-flight adjudication
+  //    is M4). Acknowledge + drop.
   if (payload.action === "rollback") {
     console.log(
-      `[bridge] rollback (reorg) acked: tx ${payload.tx_id ?? "?"} @ block ${payload.block_height ?? "?"} — no dispatch`,
+      `[bridge] rollback acked: tx ${payload.tx_id ?? "?"} @ ${payload.block_height ?? "?"} — no dispatch`,
     );
+    markHandled(webhookId);
     return new Response("rollback acked", { status: 204 });
   }
 
-  // 4) map the decoded event -> an audit target. A test/ping or a contract-less event verifies the
-  //    signature path but has nothing to audit -> accept as a no-op (keeps test(id) green w/o spend).
-  const ev = payload.event;
-  const contractId = ev?.contract_id ?? ev?.asset_identifier?.split("::")[0];
-  if (!contractId) {
-    return new Response("accepted (no contract to audit)", { status: 200 });
+  const event = payload.event;
+  const contractId = event?.contract_id ?? event?.asset_identifier?.split("::")[0];
+  const fnName = event?.function_name;
+  if (!contractId || !fnName) {
+    markHandled(webhookId);
+    return new Response("accepted (no contract/fn to audit)", { status: 200 });
   }
 
-  // 5) GLOBAL DAILY SPEND CEILING — reserve the tier's estimated cost BEFORE dispatching, so the
-  //    path is never exposed uncapped. On breach the ceiling pauses + pages; we shed the trigger.
-  const tier = classifyTier(ev);
+  // 4) load the watched contract's config; an unmonitored contract (no KB record) is a no-op.
+  let config: ReturnType<typeof deriveConfig>;
+  try {
+    config = deriveConfig(contractId);
+  } catch {
+    console.log(`[bridge] no config for ${contractId} — unmonitored, dropping`);
+    markHandled(webhookId);
+    return new Response("unmonitored contract", { status: 204 });
+  }
+  const fn = config.sensitiveFns.find((f) => f.name === fnName);
+  if (!fn) {
+    markHandled(webhookId);
+    return new Response("fn not watched", { status: 204 });
+  }
+
+  // 5) event-level dedup (tx-based) — a replay/re-delivery of the same event is a no-op.
+  const key = dedupKey(payload.tx_id, contractId, fnName);
+  if (isDuplicate(key)) {
+    markHandled(webhookId);
+    return new Response("duplicate event", { status: 200 });
+  }
+
+  // 6) PRE-FILTER — benign ⇒ log + 204, ZERO spend.
+  const verdict = classify(fn, event as ChainEventBody);
+  if (!verdict.notable) {
+    console.log(`[bridge] benign ${contractId}.${fnName}: ${verdict.reason} — no spend`);
+    markHandled(webhookId);
+    return new Response(`benign: ${verdict.reason}`, { status: 204 });
+  }
+
+  // 7) debounce floody classes (governance is exempt — every distinct proposal must be audited;
+  //    dedup already blocks exact refire, the spend ceiling is the ultimate cap).
+  if (!GOVERNANCE_CLASSES.includes(fn.triggerClass)) {
+    const deb = inDebounce(contractId, fnName);
+    if (deb.blocked) {
+      console.log(
+        `[bridge] debounced ${contractId}.${fnName} (${deb.elapsedMs}ms since last) — no spend`,
+      );
+      markHandled(webhookId);
+      return new Response("debounced", { status: 200 });
+    }
+  }
+
+  // 8) reserve the tier's estimated cost BEFORE any dispatch (cap before spend). On breach the
+  //    ceiling pauses + pages; shed with 429 and DO NOT mark handled (server retry can re-drive
+  //    after a day rollover / human clear).
+  const tier = tierFor(fn.triggerClass, config.tier);
   const gate = await reserve(tier);
   if (!gate.allowed) {
     return new Response(`spend ceiling: ${gate.reason}`, { status: 429 });
   }
 
-  const message =
-    `State change on ${contractId} (${ev?.type ?? "event"} ${ev?.function_name ?? ""} @ block ${payload.block_height ?? "?"}, tx ${payload.tx_id ?? "?"}). ` +
-    `Re-audit it: fetch source, run the auditor-* subagents, verify findings, reproduce any confirmed high/critical with run_simnet_poc, and report.`;
+  // 9) build the directive (audit_targets[] incl. decoded proposal + live closure) and dispatch.
+  const { message, directive } = await buildDirective(
+    config,
+    fn,
+    event as ChainEventBody,
+    verdict,
+    {
+      txId: payload.tx_id,
+      blockHeight: payload.block_height,
+    },
+  );
+  const dispatch = await dispatchToEve(message, tier);
+  if (!dispatch.ok) {
+    // transient — let the server retry (do NOT mark handled).
+    return new Response("eve error", { status: 502 });
+  }
 
-  // 6) forward to the eve agent (built-in HTTP session endpoint), authed with a short-lived HMAC JWT
-  //    so an unauthenticated POST can't force a (budgeted) sweep.
-  const eveHeaders: Record<string, string> = { "content-type": "application/json" };
-  if (eveAuthEnabled()) eveHeaders.authorization = `Bearer ${mintEveSessionToken()}`;
-  const res = await fetch(EVE_SESSION_URL, {
-    method: "POST",
-    headers: eveHeaders,
-    body: JSON.stringify({ message }),
+  // 10) commit: dedup + debounce + trigger→session ledger (M4 reads this with readRun(sessionId)).
+  const sessionId = dispatch.sessionId ?? `unknown:${key}`;
+  commitDispatch(key, {
+    sessionId,
+    contractId,
+    fn: fnName,
+    triggerClass: fn.triggerClass,
+    tier,
+    txId: payload.tx_id,
+    blockHeight: payload.block_height,
+    deadlineBlock: directive.deadline_block,
+    auditTargets: directive.audit_targets,
+    suspicious: verdict.suspicious,
+    dispatchedAt: new Date().toISOString(),
   });
-  return new Response(res.ok ? "queued" : "eve error", { status: res.ok ? 202 : 502 });
+  markHandled(webhookId);
+  console.log(
+    `[bridge] dispatched ${tier} audit for ${contractId}.${fnName} (${directive.audit_targets.length} targets, session ${sessionId})`,
+  );
+  return new Response("queued", { status: 202 });
 }
 
 // Minimal Bun server when run directly.
@@ -154,5 +237,7 @@ if (import.meta.main) {
     fetch: (req) =>
       req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 }),
   });
-  console.log(`secondlayer-webhook bridge listening on :${port} -> ${EVE_SESSION_URL}`);
+  console.log(
+    `secondlayer-webhook bridge listening on :${port} (deep -> ${sessionUrlForTier("deep")})`,
+  );
 }
