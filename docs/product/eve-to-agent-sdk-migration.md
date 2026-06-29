@@ -63,10 +63,14 @@ reason to leave Vercel, distinct from the gateway. The inbound bridge + outbound
   surface for "@Claude audit <contractId>" but it runs Anthropic's hosted agent, not our pipeline.
 
 ## Phased plan
-1. **Promote the spike → `engine/audit.ts`**: `audit(contractId, {tier, panel})` returning the
-   structured findings + metrics. (Done in spirit by `spike/`; harden + move out of `spike/`.)
-2. **`run_simnet_poc` as an MCP tool** wrapping the existing docker sandbox → closes the PoC gap so the
-   verifier→PoC→green-promote loop works on the new substrate.
+1. ✅ **DONE — `engine/audit.ts`**: `audit(contractId, {tier|model|panel|effort})` → structured
+   findings (validated via `monitoring/adjudication` `SentinelFindings`) + native metrics. Tier
+   defaults (monitor=Sonnet/minimal, deep=Opus/full/high). `engine/run.ts` CLI + `bun run audit`.
+2. ✅ **DONE — `engine/tools/run-simnet-poc.ts`**: `run_simnet_poc` MCP tool — `docker run --rm
+   --network none` of the baked image; sandbox-unavailable→pocStatus `pending` vs PoC-fail→`failed`;
+   path-guarded. Handler validated locally (docker-down→pending, bad path→reject). NOTE: full live
+   reproduce needs Docker up + `bun run sandbox:build`; authoring NEW poc files (vs the baked
+   finding-1) is a follow-up (mount a written poc into the container).
 3. **Repoint the bridge**: `webhooks/secondlayer-webhook.ts` calls `audit(...)` (in-process or via a
    worker queue) instead of POSTing to eve; keep HMAC verify + spend reserve + dedup/debounce.
 4. **Adjudication off `structured_output`**: feed `result.structured_output` straight into
