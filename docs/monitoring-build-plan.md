@@ -172,7 +172,24 @@ server-side (wildcard set entries? `recipient` too? composition with `minAmount`
 measures the **webhook volume** that justifies pushing it down. If volume is trivial
 (pre-launch, few clients), f044 stays deferred — confirmed by real numbers, not a guess.
 
-## M4 — Adjudication + alert: close the loop (M)
+## M4 — Adjudication + alert: close the loop (M) — **DONE (2026-06-29)**
+**Outcome:** `monitoring/adjudication.ts` + `notify.ts` + `adjudicate-run.ts` (10 unit tests,
+35 total green). The agent now ends a monitoring report with a machine-readable
+`[SENTINEL-FINDINGS]{…}` block (`agent/instructions.md`); adjudication parses it
+DETERMINISTICALLY (no extra model call, no spend) → drops refuted, suppresses accepted
+centralization waivers (matched against the contract's KB waivers), flags provisional-critical
+(confirmed high/crit + pending PoC), rolls up overall severity/class/alertLevel/recommendedAction +
+the real `tokenCostUsd`. `notify.ts` routes ONE internal alert, warn-once (no re-page), with a
+provisional→green auto-promotion; **disclosure stays human-gated — never auto-discloses**.
+`adjudicate-run.ts` is the entrypoint: `readRun(sessionId)` + trigger ledger + KB waivers →
+adjudicate → notify → `reconcile(estimate, actual)` spend true-up (`--report-file` for offline).
+Proven via the CLI on a synthetic Deep report: confirmed-critical kept → WARN; refuted dropped;
+cost reconciled; and unit-tested waiver-suppression-no-re-page + promotion + no-auto-disclose.
+**Exit:** ✅ a Deep verdict → adjudicated → WARN with severity/class/PoC-status; accepted waiver
+does not re-page; nothing auto-discloses. (Live end-to-end with a real Opus run = M5, credit-gated.)
+**Deps:** M3. **secondlayer feedback:** none (pure judgment, UP).
+
+### M4 original spec (for reference)
 **Goal:** turn a sink report into a routed, human-gated alert.
 **Work:** read sink → `Adjudication{severity, class, confidence, verifierVerdict,
 pocStatus, recommendedAction, tokenCostUsd}` → one notify channel. **provisional-critical**
