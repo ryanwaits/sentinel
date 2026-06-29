@@ -72,33 +72,36 @@ eager KB derivation (ABI + sensitive-fn AST + closure) at client onboarding. See
 
 ## M2 — Provisioning: config → live subscription (M) — **SURFACE MAPPED; build next**
 **Goal:** one real secondlayer subscription, reconciled from config, delivering to the bridge.
-**Surface discovered (CLI v8.12.0; account ryan.waits, plan launch):** subscriptions ride a
-**subgraph table** + **positive** filter + webhook HMAC. `sl subscriptions create <name>
--s <subgraph> -t <table> -u <bridgeUrl> --filter contract_id.eq=<DAO> function_name.eq=propose
---no-scaffold`. Full CRUD present: `create/list/get/update/pause/resume/delete/rotate-secret/
-test/deliveries/dead/requeue/replay/doctor`. `test --post` = server-logged delivery (the smoke).
-CLI auth needs `--api-key`/`SL_API_KEY` (not `SECONDLAYER_API_KEY`). Existing subgraphs:
-`pox-stacking` has a `calls` table (precedent). See memory `secondlayer-m2-surface`.
-**Decided approach (one shared calls-subgraph):** deploy ONE `sentinel-calls` subgraph indexing
-contract_calls for the (small) watched-contract set into a `calls` table; one subscription per
-sensitive-fn filtered by `contract_id.eq + function_name.eq` → bridge. (Clients have few contracts,
-so one subgraph + N subscriptions beats per-contract subgraphs.)
+**Surface (re-investigated 2026-06-29 — supersedes the earlier subgraph-table plan):** the
+published `@secondlayer/sdk@6.25.1` has CHAIN subscriptions (`SubscriptionKind = "subgraph" |
+"chain"`). A **chain** subscription fires on raw decoded chain events with **NO subgraph deployed**:
+`client.subscriptions.create({ name, url, kind:"chain", triggers:[trigger.contractCall({contractId,
+functionName})], format:"standard-webhooks" })`. Full CRUD on the SDK client: `list/get/create/
+update/pause/resume/delete/rotateSecret/test/recentDeliveries/replay/dead`. (Installed `sl` 8.12.0
+LACKS chain-sub create; repo HEAD 8.13.0 unpublished — so use the **published SDK**, not the CLI.)
+**Decided approach (chain subscription, no subgraph):** for each sensitive fn in `deriveConfig`,
+one chain `contract_call` trigger (`contractId` + `functionName`) → bridge. The "shared
+sentinel-calls subgraph" plan is **obsolete** — skip it.
 **Work (next session):**
-- Author `subgraphs/sentinel-calls.ts` (template off `subgraphs/asset-holdings.ts`) → `calls`
-  table; deploy via `sl subgraphs deploy`.
-- Provisioner reconciler: deterministic `ruleKey` in subscription `name`; diff desired
-  (`deriveConfig` sensitive fns) vs `subscriptions list` → create/update/delete (REST or `sl`).
-- Durable KV for sub IDs + signing secrets + `ruleKey→config` (reuse the `.sentinel/` seam,
-  swap to external KV per M2/M0 note).
-- **Offboarding** (config removal → delete sub + rotate secret + purge KV); `test --post` smoke.
-- ⚠️ Creates REAL billable infra on the account — confirm before side-effecting calls.
-**Exit:** a config entry creates/reconciles a real subscription; `test --post` delivers a signed
-webhook to the bridge; removing the entry tears it down; re-running is idempotent.
+- `monitoring/provisioner.ts`: construct the SDK client (`SECONDLAYER_API_URL` + `_API_KEY`); diff
+  desired (from `deriveConfig` sensitive fns, keyed by a deterministic `ruleKey` in the sub `name`)
+  vs `subscriptions.list()` → create/update/delete. MVP: `contract_call(<DAO>,"propose")`.
+- Durable KV for sub IDs + signing secrets + `ruleKey→config` (reuse the `.sentinel/` seam).
+- **Offboarding** (config removal → `delete` + `rotateSecret` + purge KV); `subscriptions.test(id)` smoke.
+- **Fix the bridge envelope** (M2/M3): real shape is `{action, trigger, event:{contract_id,
+  function_name, function_args, sender,…}}` — current `ChainEvent` reads top-level fields (wrong);
+  handle `action:"rollback"`; dedup on the `webhook-id` header.
+- ⚠️ Creates REAL billable infra on the account — confirm before side-effecting calls; clean up test subs.
+**Exit:** a config entry creates/reconciles a real chain subscription; `test(id)` delivers a signed
+webhook the bridge verifies + parses; removing the entry tears it down; re-running is idempotent.
 **Deps:** M0 (durable-state seam), M1 (`deriveConfig` sensitive fns).
-**secondlayer feedback (banked):** filters are **positive-only (no set-membership/negation)** →
-caller-allowlist pre-filter stays client-side in the bridge — **confirms the f044 negative-caller
-primitive**. No CRUD gaps (PATCH=`update`, `rotate-secret`, `test`, `pause` all exist; `name`
-usable for `ruleKey`). N-sub reconciliation pain still feeds **f043 watchlist** (N creates → 1).
+**secondlayer feedback (banked, re-confirmed):** chain `contract_call` subs SHIPPED (server 06-04,
+CLI 06-29). Filters **positive/wildcard only** — caller set-membership/negation (**f044**) is
+PLANNED-not-shipped (`plans/feat-f044-…`), so the caller-allowlist pre-filter stays client-side
+(caller = tx `sender`; immediate-caller is a node-receipt limit). **f043** watchlist (N creates → 1)
+PLANNED-not-shipped (`plans/feat-f043-…`); our reconciler is its dogfood. Contract **ABI** is on the
+prod Index (`client.contracts.get(id,{include:"abi"})`); **SOURCE** is NOT (deferred "on named pull"
+— Sentinel is that pull) → node RPC stays for the closure walk.
 
 ## M3 — The audit-on-trigger bridge (L — the core)
 **Goal:** webhook → filtered, budgeted, tiered audit on the right targets → report in the sink.
