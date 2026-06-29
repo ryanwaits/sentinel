@@ -41,6 +41,9 @@ function sessionUrlForTier(tier: Tier): string {
 
 const GOVERNANCE_CLASSES = ["governance.proposal_submitted", "governance.proxy_upgrade"];
 
+/** Representative governance timelock window (blocks) for the deadline watchdog. ~1 day at ~10min/block. */
+const TIMELOCK_BLOCKS = Number(process.env.SENTINEL_TIMELOCK_BLOCKS ?? 144);
+
 /** The decoded chain-subscription envelope. The event is under `event.*`, NOT top-level. */
 type ChainWebhook = {
   action?: "apply" | "rollback";
@@ -191,6 +194,14 @@ export async function handle(req: Request): Promise<Response> {
   }
 
   // 9) build the directive (audit_targets[] incl. decoded proposal + live closure) and dispatch.
+  //    For a governance proposal the verdict races a timelock: deadline_block = the block by which a
+  //    WARN must land (trigger block + the DAO's timelock window). The agent uses it to deliver a
+  //    verdict before the slow PoC. SENTINEL_TIMELOCK_BLOCKS is the representative window (real
+  //    per-DAO timelock read is a later refinement).
+  const deadlineBlock =
+    GOVERNANCE_CLASSES.includes(fn.triggerClass) && payload.block_height
+      ? payload.block_height + TIMELOCK_BLOCKS
+      : null;
   const { message, directive } = await buildDirective(
     config,
     fn,
@@ -199,6 +210,7 @@ export async function handle(req: Request): Promise<Response> {
     {
       txId: payload.tx_id,
       blockHeight: payload.block_height,
+      deadlineBlock,
     },
   );
   const dispatch = await dispatchToEve(message, tier);
