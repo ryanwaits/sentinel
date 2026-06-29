@@ -12,15 +12,22 @@ import { auditOptions, auditPrompt } from "./agent";
 
 const contractId = process.argv[2] ?? "SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.v0-vault-sbtc";
 const model = process.argv[3] ?? "claude-sonnet-4-6";
+const panel = (process.argv[4] as "minimal" | "full") ?? "minimal";
+const effort = (process.argv[5] as "low" | "medium" | "high" | "xhigh" | "max") ?? "medium";
 
-console.log(`=== Agent SDK spike ===\ntarget: ${contractId}\nmodel:  ${model}\n`);
+console.log(
+  `=== Agent SDK spike ===\ntarget: ${contractId}\nmodel:  ${model}\npanel:  ${panel} | effort: ${effort}\n`,
+);
 
 const t0 = Date.now();
 let result: Record<string, unknown> | null = null;
 let toolCalls = 0;
 let subagentTasks = 0;
 
-for await (const msg of query({ prompt: auditPrompt(contractId), options: auditOptions(model) })) {
+for await (const msg of query({
+  prompt: auditPrompt(contractId),
+  options: auditOptions(model, panel, effort),
+})) {
   if (msg.type === "assistant") {
     for (const block of (msg.message?.content ?? []) as Array<{ type: string; name?: string }>) {
       if (block.type === "tool_use") {
