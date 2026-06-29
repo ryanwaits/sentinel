@@ -7,6 +7,13 @@ code yet. The backend primitives (audit engine, KB→`deriveConfig`→`Monitorin
 chain subscriptions, bridge pre-filter→tiered audit, adjudication→warn-once notify) already exist
 and are individually proven; what's missing is the **surface + two glue automations + multi-tenancy**.
 
+## Architecture decision (supersedes eve-runtime assumptions below)
+[eve-to-agent-sdk-migration.md](./eve-to-agent-sdk-migration.md) — **ADR (spike-validated): gut eve
+for `@anthropic-ai/claude-agent-sdk`, direct to Anthropic, drop the Vercel AI Gateway.** The spike
+audited the real Zest vault in 8.4min/$0.95 with native observability + structured findings; eve
+never finished. This reframes Phase 2 (the durable-run-store workaround disappears) and pushes the
+audit worker onto a container (the SDK spawns a subprocess — the real reason to leave Vercel).
+
 ## The three plans
 | Doc | What it scopes | Key decision |
 |---|---|---|
