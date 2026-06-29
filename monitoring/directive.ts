@@ -29,6 +29,11 @@ const GOVERNANCE_CLASSES: TriggerClass[] = [
   "governance.proxy_upgrade",
 ];
 
+// Trigger-time closure bounds — keep the dispatched audit scope to the immediate blast radius so the
+// subagent panel isn't drowned in inlined source. The agent expands deeper on demand.
+const CLOSURE_MAX_DEPTH = Number(process.env.SENTINEL_CLOSURE_MAX_DEPTH ?? 2);
+const CLOSURE_MAX_CONTRACTS = Number(process.env.SENTINEL_CLOSURE_MAX_CONTRACTS ?? 6);
+
 /**
  * Tier for an event = the STRICTER of the class tier and the contract's archetype tier (deep
  * beats monitor), so a value-holding contract is never under-audited. Governance → deep; transfer/
@@ -65,9 +70,13 @@ export async function buildAuditTargets(
       add(proposal);
       if (sourceReadEnabled()) {
         try {
+          // Bound the trigger-time walk to the immediate blast radius — dispatching a 64-contract
+          // audit inlines too much source across the subagent panel (slow + costly). The agent
+          // expands deeper via its own fetch_contract_source if a target warrants it.
           const ids = await resolveClosureIds(
             proposal,
             async (id) => (await fetchSourceById(id))?.source ?? null,
+            { maxDepth: CLOSURE_MAX_DEPTH, maxContracts: CLOSURE_MAX_CONTRACTS },
           );
           for (const id of ids) add(id);
         } catch {

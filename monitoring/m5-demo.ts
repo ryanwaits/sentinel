@@ -26,8 +26,9 @@ import { adjudicateSession } from "./adjudicate-run";
 import { listRecords } from "./trigger-state";
 import { watchRun } from "./watch-run";
 
-const CCD002 = "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd002-treasury-mia-mining-v3";
-const DAO = "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.base-dao";
+const DAO_ADDR = "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH";
+const CCD002 = `${DAO_ADDR}.ccd002-treasury-mia-mining-v3`;
+const DAO = `${DAO_ADDR}.base-dao`;
 const ZEST_VAULT_ADDR = "SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7";
 const ZEST_VAULT_NAME = "v0-vault-sbtc";
 const ZEST_VAULT = `${ZEST_VAULT_ADDR}.${ZEST_VAULT_NAME}`;
@@ -72,7 +73,7 @@ async function main() {
     sender: DAO,
     function_args: [
       Cl.serialize(Cl.contractPrincipal(ZEST_VAULT_ADDR, ZEST_VAULT_NAME)),
-      Cl.serialize(Cl.standardPrincipal(DAO)),
+      Cl.serialize(Cl.standardPrincipal(DAO_ADDR)),
     ],
   };
   const req = new Request("http://localhost/m5", {
@@ -101,7 +102,17 @@ async function main() {
   console.log("[watch] polling the run to completion (Deep sweep — minutes)...");
   const result = await watchRun(record.sessionId, { timeoutMs: 25 * 60 * 1000 });
   const elapsedMin = ((Date.now() - t0) / 60000).toFixed(1);
-  console.log(`[watch] ${result.status} after ${elapsedMin} min | $${result.usage.costUsd}`);
+  console.log(
+    `[watch] ${result.status} after ${elapsedMin} min | $${result.usage.costUsd} | reportLen ${result.report.length}`,
+  );
+
+  if (result.status === "running") {
+    console.log(
+      `\n⚠️  watcher timed out with the run still in progress — NOT a clean result. The report lives on the durable stream; re-read once it finishes:\n` +
+        `   bun run monitoring/watch-run.ts ${record.sessionId} --adjudicate`,
+    );
+    return;
+  }
 
   const out = await adjudicateSession(record.sessionId, {
     report: result.report,
