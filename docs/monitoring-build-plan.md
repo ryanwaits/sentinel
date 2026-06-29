@@ -70,8 +70,28 @@ endpoint on the Index** is a clean generic DOWN primitive — fixes the raw-IP/n
 serves any consumer. Source is immutable, so it's a read-through cache (not a subgraph). UP side:
 eager KB derivation (ABI + sensitive-fn AST + closure) at client onboarding. See feedback log.
 
-## M2 — Provisioning: config → live subscription (M) — **SURFACE MAPPED; build next**
+## M2 — Provisioning: config → live subscription (M) — **DONE (2026-06-29)**
 **Goal:** one real secondlayer subscription, reconciled from config, delivering to the bridge.
+**Outcome (proven live, then torn down):** `monitoring/provisioner.ts` reconciles
+`deriveConfig` sensitive fns → secondlayer **chain** `contract_call` subs (one per fn, `ruleKey`
+=`sentinel:<contractId>:<fn>` as the sub `name` AND webhook URL path); dry-run is the default,
+`--apply`/`--only`/`--offboard`/`--test`. `monitoring/sub-store.ts` = durable KV
+(`.sentinel/subscriptions.json`, ruleKey→{subId, signingSecret}). Bridge fixed: real envelope
+(`action`/`event.*`), `rollback`→204 no-dispatch, `webhook-id` dedup, per-ruleKey secret lookup.
+Proven on the real account: create `ccd002-treasury…:execute` → idempotent re-run (no-op) →
+`test(id)` delivered a signed webhook through an ngrok tunnel, bridge verified+parsed → **200**;
+bad-sig → **401**; `--offboard --apply` deleted it (account back to 0 sentinel subs, KV empty).
+**Exit:** ✅ all met.
+**NEW secondlayer-feedback (SDK shape drift):** the published `CreateSubscriptionRequest` has **NO
+`kind` field** — chain vs subgraph is inferred from `triggers` vs `subgraphName`. Earlier
+notes/memory said `kind:"chain"`; that field doesn't exist in `@secondlayer/sdk@6.25.1` (would be an
+excess property). Chain mode = pass `triggers`, omit `subgraphName`. `test(id)` payload is generic
+(`{test:true, message, subscription_id, sent_at}`, `event_type:"chain.test.apply"`) — NO
+`event.contract_id`/`action`, so a correct bridge accepts it as a no-op 200 without firing an audit.
+**N-sub pain (f043 dogfood):** one `deriveConfig` (CCD002 treasury) = 4 fns = 4 separate
+`create` round-trips today; a watchlist primitive (N→1) would collapse these.
+
+### M2 superseded surface notes (kept for context)
 **Surface (re-investigated 2026-06-29 — supersedes the earlier subgraph-table plan):** the
 published `@secondlayer/sdk@6.25.1` has CHAIN subscriptions (`SubscriptionKind = "subgraph" |
 "chain"`). A **chain** subscription fires on raw decoded chain events with **NO subgraph deployed**:
