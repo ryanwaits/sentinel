@@ -123,7 +123,33 @@ PLANNED-not-shipped (`plans/feat-f043-…`); our reconciler is its dogfood. Cont
 prod Index (`client.contracts.get(id,{include:"abi"})`); **SOURCE** is NOT (deferred "on named pull"
 — Sentinel is that pull) → node RPC stays for the closure walk.
 
-## M3 — The audit-on-trigger bridge (L — the core)
+## M3 — The audit-on-trigger bridge (L — the core) — **DONE (2026-06-29); live Opus run gated on credits**
+**Outcome (bridge path proven end-to-end, no Opus spend):** built in two commits — M3a (bridge:
+`monitoring/prefilter.ts` + `directive.ts` + `trigger-state.ts` + `contract-source.ts` + the rewired
+`webhooks/secondlayer-webhook.ts`, 20 unit tests) and M3b (`agent/instructions.md` directive mode).
+Verified with a mock-eve smoke driving the REAL bridge: a governance `execute` →
+decoded the proposal principal from `function_args` → live node-walked its closure →
+`audit_targets[]` = proposal-first + live closure ∪ watched + KB closure (6, deduped) → `deep` tier →
+spend reserved → session captured → trigger→session ledger written → 202. **Per-class pre-filter
+decided** (a single caller-allowlist rule fails: `execute` is always called by base-dao, so
+"caller∈allowlist⇒drop" would drop every proposal): governance.*=always-notable (caller outside
+allowlist ⇒ `suspicious`); transfer.outflow=benign below threshold (fail-safe audit if undecodable/
+no threshold); counterparty.new=benign if caller known. Governance is **debounce-exempt** (every
+distinct proposal audited; dedup blocks exact refire). Tier = stricter of class-tier and contract
+archetype-tier. **Remaining for full exit = the actual Deep Opus run completing + report read via
+`readRun(sessionId)`** — billable + needs the AI-Gateway top-up (free tier 403s Opus); this is the
+M5 prevention-demo run. The sink IS the replayable stream (M0), so M4 reads the report by the
+captured session id.
+**Exit:** ✅ bridge path (verify→dedup→pre-filter→targets→budget→tier-route→dispatch→ledger);
+⏳ live Deep report (M5, credit-gated).
+**secondlayer feedback (NEW, key):** the per-class pre-filter PROVES f044's caller filter can't be a
+flat set-membership rule — for governance the allowlist is provenance (out-of-set ⇒ escalate), not a
+drop; the drop-signal is class-specific (threshold for transfers, known-set for counterparties). So
+f044 should be **class-aware or stay a Sentinel-side concern**; a generic `callerNotIn` only helps
+the transfer/counterparty classes. **Webhook volume not yet measured** (no live flood) — the "is it
+worth pushing the filter server-side" call still needs real numbers (M5/first client).
+
+### M3 original spec (for reference)
 **Goal:** webhook → filtered, budgeted, tiered audit on the right targets → report in the sink.
 **Work:** harden `webhooks/secondlayer-webhook.ts`:
 - HMAC verify (`verifyWebhookSignature`, 401 on fail).
