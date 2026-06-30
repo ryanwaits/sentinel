@@ -36,13 +36,16 @@ export type DeliveryRecord = {
   errorMessage: string | null;
 };
 
-/** Everything needed to create one chain `contract_call` subscription. */
-export type CreateSubParams = {
-  name: string;
-  url: string;
-  contractId: string;
-  functionName: string;
-};
+/** Everything needed to create one chain subscription. Discriminated by `kind`:
+ *  - contract_call: watch a privileged FUNCTION (Type-1 governance/upgrade + Type-2 counterparty).
+ *  - stx_outflow / ft_outflow: watch an ASSET LEAVING the contract (sender = contractId) — covers
+ *    every outflow path, not just one fn (Type-2 transfer.outflow). ft_outflow narrows to one asset
+ *    when `assetIdentifier` is set, else any FT from the sender. */
+export type SubSpec =
+  | { kind: "contract_call"; contractId: string; functionName: string }
+  | { kind: "stx_outflow"; sender: string }
+  | { kind: "ft_outflow"; sender: string; assetIdentifier?: string };
+export type CreateSubParams = { name: string; url: string } & SubSpec;
 
 /**
  * The chain-trigger provider contract. Default impl = secondlayer; a future Chainhook impl would
@@ -54,7 +57,7 @@ export interface TriggerSource {
   readonly providerName: string;
   /** All subscriptions on the account (caller scopes by name prefix). */
   list(): Promise<RemoteSubscription[]>;
-  /** Create a chain contract_call subscription; returns the once-only signing secret. */
+  /** Create a chain subscription (contract_call or asset-outflow); returns the once-only signing secret. */
   create(params: CreateSubParams): Promise<CreatedSubscription>;
   /** Re-point an existing subscription's delivery URL. */
   updateUrl(subId: string, url: string): Promise<void>;
@@ -90,14 +93,23 @@ class SecondLayerTriggerSource implements TriggerSource {
 
   async create(params: CreateSubParams): Promise<CreatedSubscription> {
     // Chain subscription: presence of `triggers` (no `subgraphName`) selects chain mode — there is
-    // no `kind` field on CreateSubscriptionRequest in the published SDK.
+    // no `kind` field on CreateSubscriptionRequest in the published SDK. The trigger builder is
+    // chosen by our CreateSubParams.kind; transfer triggers scope on `sender` so they fire only on
+    // assets LEAVING the watched contract.
+    const t =
+      params.kind === "contract_call"
+        ? trigger.contractCall({ contractId: params.contractId, functionName: params.functionName })
+        : params.kind === "stx_outflow"
+          ? trigger.stxTransfer({ sender: params.sender })
+          : trigger.ftTransfer({
+              sender: params.sender,
+              ...(params.assetIdentifier ? { assetIdentifier: params.assetIdentifier } : {}),
+            });
     const res = await this.#c().subscriptions.create({
       name: params.name,
       url: params.url,
       format: "standard-webhooks",
-      triggers: [
-        trigger.contractCall({ contractId: params.contractId, functionName: params.functionName }),
-      ],
+      triggers: [t],
     });
     return { subId: res.subscription.id, signingSecret: res.signingSecret };
   }

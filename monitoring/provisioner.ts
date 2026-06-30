@@ -32,25 +32,29 @@
  * Env: SECONDLAYER_API_URL (https://api.secondlayer.tools), SECONDLAYER_API_KEY,
  *      BRIDGE_BASE_URL (public https URL of the bridge — required for create/update).
  */
+import type { SensitiveFn } from "./config";
 import { deriveConfig } from "./kb";
 import { formatRollup, recordDelivery, recordReconcile } from "./provision-metrics";
-import { defaultTriggerSource, type TriggerSource } from "./sources/trigger-source";
+import { defaultTriggerSource, type SubSpec, type TriggerSource } from "./sources/trigger-source";
 import {
   deleteRecord,
   getByRuleKey,
   NAME_PREFIX,
   putRecord,
   ruleKeyFor,
+  ruleKeyForOutflow,
   type SubRecord,
 } from "./sub-store";
 
-/** One desired subscription, derived from a sensitive fn. */
+/** One desired subscription. `fn` is the watched fn name, or `outflow:<asset>` for a transfer sub. */
 type Desired = {
   ruleKey: string;
   contractId: string;
   fn: string;
   triggerClass: string;
   url: string;
+  spec: SubSpec;
+  label: string;
 };
 
 function bridgeBaseUrl(): string {
@@ -59,21 +63,53 @@ function bridgeBaseUrl(): string {
   return base.replace(/\/+$/, "");
 }
 
-/** The desired subscription set for a contract (optionally narrowed to one fn). */
+/**
+ * Map one sensitive fn to its desired subscription. SUBSCRIPTION KIND keys on triggerClass (NOT the
+ * Type-1/Type-2 response route): `transfer.outflow` watches the ASSET leaving the contract (one sub
+ * per contract+asset — covers every outflow path, sender = contractId); everything else (governance.*
+ * AND counterparty.new) watches the FUNCTION via contract_call.
+ */
+export function desiredForFn(contractId: string, fn: SensitiveFn): Desired {
+  if (fn.triggerClass === "transfer.outflow") {
+    const asset = fn.outflowThreshold?.asset ?? fn.suggestedOutflowThreshold?.asset ?? "stx";
+    const ruleKey = ruleKeyForOutflow(contractId, asset);
+    const spec: SubSpec =
+      asset === "stx"
+        ? { kind: "stx_outflow", sender: contractId }
+        : { kind: "ft_outflow", sender: contractId, assetIdentifier: asset };
+    return {
+      ruleKey,
+      contractId,
+      fn: `outflow:${asset}`,
+      triggerClass: fn.triggerClass,
+      url: `${bridgeBaseUrl()}/${encodeURIComponent(ruleKey)}`,
+      spec,
+      label: `${spec.kind}(sender=${contractId}${asset !== "stx" ? `, asset=${asset}` : ""})`,
+    };
+  }
+  const ruleKey = ruleKeyFor(contractId, fn.name);
+  return {
+    ruleKey,
+    contractId,
+    fn: fn.name,
+    triggerClass: fn.triggerClass,
+    url: `${bridgeBaseUrl()}/${encodeURIComponent(ruleKey)}`,
+    spec: { kind: "contract_call", contractId, functionName: fn.name },
+    label: `contract_call(${contractId}, "${fn.name}")`,
+  };
+}
+
+/** The desired subscription set for a contract (optionally narrowed to one fn). Transfer subs that
+ *  share a (contract, asset) collapse to one — multiple outflow fns ⇒ a single asset-outflow watch. */
 function desiredFor(contractId: string, only?: string): Desired[] {
   const config = deriveConfig(contractId);
-  return config.sensitiveFns
-    .filter((f) => !only || f.name === only)
-    .map((f) => {
-      const ruleKey = ruleKeyFor(contractId, f.name);
-      return {
-        ruleKey,
-        contractId,
-        fn: f.name,
-        triggerClass: f.triggerClass,
-        url: `${bridgeBaseUrl()}/${encodeURIComponent(ruleKey)}`,
-      };
-    });
+  const byKey = new Map<string, Desired>();
+  for (const f of config.sensitiveFns) {
+    if (only && f.name !== only) continue;
+    const d = desiredForFn(contractId, f);
+    if (!byKey.has(d.ruleKey)) byKey.set(d.ruleKey, d);
+  }
+  return [...byKey.values()];
 }
 
 type Plan = {
@@ -114,8 +150,7 @@ function printPlan(plan: Plan, apply: boolean): void {
   console.log(
     `[provisioner:${tag}] create=${plan.create.length} update=${plan.update.length} delete=${plan.delete.length}`,
   );
-  for (const d of plan.create)
-    console.log(`  + create  ${d.ruleKey}  contract_call(${d.contractId}, "${d.fn}") -> ${d.url}`);
+  for (const d of plan.create) console.log(`  + create  ${d.ruleKey}  ${d.label} -> ${d.url}`);
   for (const u of plan.update)
     console.log(`  ~ update  ${u.desired.ruleKey}  url ${u.fromUrl} -> ${u.desired.url}`);
   for (const x of plan.delete) console.log(`  - delete  ${x.ruleKey}  (${x.subId})`);
@@ -126,12 +161,7 @@ function printPlan(plan: Plan, apply: boolean): void {
 /** Execute a plan against the live account; persists secrets for created subs. */
 async function applyPlan(source: TriggerSource, plan: Plan): Promise<void> {
   for (const d of plan.create) {
-    const res = await source.create({
-      name: d.ruleKey,
-      url: d.url,
-      contractId: d.contractId,
-      functionName: d.fn,
-    });
+    const res = await source.create({ name: d.ruleKey, url: d.url, ...d.spec });
     const rec: SubRecord = {
       ruleKey: d.ruleKey,
       subId: res.subId,
@@ -176,7 +206,16 @@ async function offboard(source: TriggerSource, contractId: string, apply: boolea
 
 /** test(id) smoke: send a signed test webhook to the bridge; record the delivery-health metric. */
 async function smokeTest(source: TriggerSource, contractId: string, fn: string): Promise<void> {
-  const ruleKey = ruleKeyFor(contractId, fn);
+  const sfn = deriveConfig(contractId).sensitiveFns.find((f) => f.name === fn);
+  if (!sfn) throw new Error(`${fn} is not a sensitive fn of ${contractId}`);
+  // transfer.outflow fns subscribe per-asset (ruleKeyForOutflow), not per-fn.
+  const ruleKey =
+    sfn.triggerClass === "transfer.outflow"
+      ? ruleKeyForOutflow(
+          contractId,
+          sfn.outflowThreshold?.asset ?? sfn.suggestedOutflowThreshold?.asset ?? "stx",
+        )
+      : ruleKeyFor(contractId, fn);
   const rec = getByRuleKey(ruleKey);
   if (!rec) throw new Error(`no live subscription for ${ruleKey} — run --apply --only ${fn} first`);
   console.log(`[provisioner] test(${rec.subId}) -> bridge (${rec.url})`);

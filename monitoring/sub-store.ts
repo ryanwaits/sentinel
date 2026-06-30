@@ -26,6 +26,12 @@ export function ruleKeyFor(contractId: string, fn: string): string {
   return `${NAME_PREFIX}${contractId}:${fn}`;
 }
 
+/** Key for an asset-outflow watch (one transfer sub per contract+asset, not per fn). Same
+ *  `sentinel:<contract>:` prefix so offboard/scoping still catches it. */
+export function ruleKeyForOutflow(contractId: string, asset: string): string {
+  return `${NAME_PREFIX}${contractId}:outflow:${asset}`;
+}
+
 /** One persisted subscription. `signingSecret` is a bare 64-char hex (Standard Webhooks). */
 export type SubRecord = {
   ruleKey: string;
