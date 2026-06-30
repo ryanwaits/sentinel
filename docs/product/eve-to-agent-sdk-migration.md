@@ -87,8 +87,11 @@ reason to leave Vercel, distinct from the gateway. The inbound bridge + outbound
    bridge + engine, long-running; **Docker-out-of-Docker** (host socket) runs the airgapped sandbox.
    **#4:** `run_simnet_poc` `pocSource` runs a NEW PoC airgapped (mounted at `/app/poc/_dynamic.ts`).
    Two deploy bugs found + fixed live: `docker-cli` not `docker.io`; `IS_SANDBOX=1` (bypassPermissions →
-   `claude --dangerously-skip-permissions` refuses root). **Remaining for autonomous (Tier 2, user-run):**
-   public tunnel + live secondlayer subscription. Multi-tenant hardening: see ../plans/backend-hardening.md.
+   `claude --dangerously-skip-permissions` refuses root). **Tier 2 (autonomous) also PROVEN:** cloudflare
+   tunnel → `provisioner --apply` created a real secondlayer chain subscription (per-ruleKey secret in the
+   `/data` sub-store) → secondlayer signed test delivery → bridge 200 (HMAC verified; unsigned→401), then
+   offboarded. Persistent autonomous monitoring = the same on the user's own always-on host + tunnel
+   (deploy/RUNBOOK.md §2–4). Multi-tenant hardening: ../plans/backend-hardening.md.
 
 ## Open questions
 1. Worker hosting target (Fly / Railway / Render / own VM) for the subprocess-spawning audit worker?
