@@ -1,11 +1,15 @@
 /**
  * Contract source reader — fetch a deployed Clarity contract's source off the Stacks node RPC.
  *
- * Pure (no eve dependency) so BOTH the `fetch_contract_source` agent tool AND the monitoring bridge
- * (closure resolution on a trigger) can use it. Source-read surface: STACKS_NODE_URL must point at
- * the secondlayer-operated node (hard rule: all on-chain data via secondlayer; no third-party APIs).
- * Contract SOURCE is not on the Index yet (deferred "on named pull"), so the node RPC is the path;
- * the silent Hiro default is removed (Hiro only as an explicit spike fallback you opt into).
+ * Pure (no SDK dependency) so BOTH the engine's `fetch_contract_source` MCP tool AND the monitoring
+ * bridge (closure resolution on a trigger) can use it.
+ *
+ * HONEST LABEL (no allegiance the code doesn't have): this reads whatever node `STACKS_NODE_URL`
+ * points at — nothing here enforces WHICH node. In prod that should be the secondlayer-operated node
+ * (`:20443`); Hiro is only an explicit spike fallback you opt into. secondlayer has no contract-
+ * source API yet (source is deferred off the Index), so node RPC over `/v2/contracts/source` IS the
+ * secondlayer path today. If `STACKS_NODE_URL` is unset, reads return null — no silent third-party
+ * default.
  */
 const NODE_URL = process.env.STACKS_NODE_URL;
 
