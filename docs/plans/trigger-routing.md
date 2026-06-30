@@ -1,7 +1,11 @@
 # Plan — trigger routing: audit-new-code (Type 1) vs incident-triage (Type 2)
 
-**Status:** near-term correctness fix to the live monitoring pipeline (NOT premature — it should land
-before onboarding a real client, so behavioral events don't fire wasteful full audits).
+**Status:** in progress. MVP-PRODUCER done (commit 94f2dc4 — audit generates the scope). The
+transfer-subscription provisioning seam done (commit 76842de — `trigger.ftTransfer`/`stxTransfer` via
+`trigger-source`/`provisioner`; outflow subs scoped sender=contract, per contract+asset). REMAINING for
+the live loop (#2 / MVP-CONSUMER): the bridge parsing transfer-event payloads + `monitoring/incident-triage.ts`
+(deterministic correlation) + the Type-2 webhook fork. Near-term correctness fix — re-auditing unchanged
+live code on a behavioral event is the bug this closes.
 
 ## Problem
 `monitoring/audit-pipeline.ts` `runTrigger` sends **every** notable trigger to `audit()` — the full
