@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel — audit → monitoring lifecycle</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111824; --panel2:#0e141d; --line:#1d2836; --ink:#e6edf3; --dim:#8aa0b4; --faint:#5b7186;
+    --you:#4aa3ff; --audit:#a98bff; --mon:#27c2a0; --human:#f5a623; --drop:#46586b;
+    --you-bg:#0f2235; --audit-bg:#1c1733; --mon-bg:#0c2a25; --human-bg:#2c2310; --drop-bg:#141c26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{padding:18px 22px 10px;border-bottom:1px solid var(--line)}
+  h1{font-size:18px;margin:0 0 3px;letter-spacing:.2px}
+  h1 b{color:var(--mon)}
+  .sub{color:var(--dim);font-size:13px;max-width:980px}
+  .sub .k{color:var(--audit);font-weight:600}
+  .sub .m{color:var(--mon);font-weight:600}
+  .wrap{display:flex;gap:0;height:calc(100vh - 86px)}
+  .stage{position:relative;flex:1;overflow:auto;padding:18px 20px 120px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:2px 0 18px;color:var(--dim);font-size:12px}
+  .legend .lg{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .lanes{display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:18px;position:relative;z-index:2;min-width:840px}
+  .lane h2{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin:0 0 12px;font-weight:700}
+  .lane{display:flex;flex-direction:column;gap:16px}
+  svg.wires{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}
+  .node{position:relative;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:11px 13px;cursor:pointer;
+        transition:transform .12s,box-shadow .12s,border-color .12s,opacity .2s;z-index:2}
+  .node:hover{transform:translateY(-2px);box-shadow:0 6px 22px #0008}
+  .node .ow{font-size:10px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+  .node .ti{font-weight:650;font-size:14px}
+  .node .fr{color:var(--dim);font-size:12px;margin-top:3px}
+  .cost{font-family:ui-monospace,monospace;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .node.you{border-color:#27466b}.node.you .ow{color:var(--you)} .node.you.on{background:var(--you-bg)}
+  .node.audit{border-color:#3a2d63}.node.audit .ow{color:var(--audit)} .node.audit.on{background:var(--audit-bg)}
+  .node.mon{border-color:#16513f}.node.mon .ow{color:var(--mon)} .node.mon.on{background:var(--mon-bg)}
+  .node.human{border-color:#5a4316}.node.human .ow{color:var(--human)} .node.human.on{background:var(--human-bg)}
+  .node.drop{border-style:dashed;opacity:.72}.node.drop .ow{color:var(--drop)}
+  .node.active{outline:2px solid #fff;outline-offset:2px;box-shadow:0 0 0 6px #ffffff14,0 8px 30px #000a;transform:translateY(-2px)}
+  .node.dim{opacity:.28;filter:saturate(.5)}
+  .spacer{height:0}
+  /* detail drawer */
+  aside{width:360px;flex:none;border-left:1px solid var(--line);background:var(--panel2);padding:18px 18px 24px;overflow:auto}
+  aside .ph{color:var(--faint);font-size:13px;margin-top:40px;text-align:center}
+  .badge{display:inline-block;font-size:10px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:999px;margin-bottom:10px}
+  .b-you{background:var(--you-bg);color:var(--you)} .b-audit{background:var(--audit-bg);color:var(--audit)}
+  .b-mon{background:var(--mon-bg);color:var(--mon)} .b-human{background:var(--human-bg);color:var(--human)} .b-drop{background:var(--drop-bg);color:var(--dim)}
+  aside h3{margin:2px 0 12px;font-size:17px}
+  .kv{margin:0 0 12px}
+  .kv .lab{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin-bottom:2px}
+  .kv .val{font-size:13px;color:var(--ink)} .kv .val code{color:var(--mon);font-size:12px}
+  .pov{border-left:3px solid var(--you);background:#0f1b2a;padding:9px 12px;border-radius:0 8px 8px 0;color:#cfe0f0;font-size:13px;font-style:italic;margin-top:6px}
+  /* scenario bar */
+  .scn{position:fixed;left:0;right:360px;bottom:0;background:#0d1420ee;backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:12px 20px;z-index:20;display:flex;gap:14px;align-items:center}
+  .scn .cap{flex:1;color:#cfe0f0;font-size:13.5px;min-height:20px}
+  .scn .cap b{color:var(--you)}
+  .scn .step{color:var(--faint);font-size:12px;font-family:ui-monospace,monospace;white-space:nowrap}
+  button{background:#16202e;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13px;font-weight:600}
+  button:hover{border-color:#33485f;background:#1b2738} button:disabled{opacity:.4;cursor:default}
+  button.go{background:var(--mon);color:#04140f;border-color:var(--mon)}
+  .hint{color:var(--faint);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sentinel — <b>audit → monitoring</b> lifecycle</h1>
+  <div class="sub">One <span class="k">audit engine</span> (multi-agent, tiered, ships a green PoC), wrapped by an always-on <span class="m">monitoring</span> trigger layer. The same engine runs <b>pre-launch on demand</b> and <b>post-launch reactively</b> — the difference is the <em>trigger</em> and the <em>KB context</em>. Click a node, or ▶ Play the scenario.</div>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <div class="legend">
+      <span class="lg"><span class="dot" style="background:var(--you)"></span>You (engineer)</span>
+      <span class="lg"><span class="dot" style="background:var(--audit)"></span>Audit engine</span>
+      <span class="lg"><span class="dot" style="background:var(--mon)"></span>Monitoring service</span>
+      <span class="lg"><span class="dot" style="background:var(--human)"></span>Human gate</span>
+      <span class="lg" style="margin-left:auto"><span class="cost">$0</span> filter &nbsp; <span class="cost">$0.66</span> monitor &nbsp; <span class="cost">$2–3</span> deep</span>
+    </div>
+    <div class="lanes" id="lanes">
+      <svg class="wires" id="wires"><defs>
+        <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#3a5168"/></marker>
+        <marker id="arwLoop" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5a4316"/></marker>
+      </defs></svg>
+      <div class="lane" data-lane="0"><h2>Pre-launch · audit</h2><div class="col" id="c0"></div></div>
+      <div class="lane" data-lane="1"><h2>Handoff · audit → KB → monitoring</h2><div class="col" id="c1"></div></div>
+      <div class="lane" data-lane="2"><h2>Post-launch · monitoring loop</h2><div class="col" id="c2"></div></div>
+    </div>
+  </div>
+  <aside id="drawer"><div class="ph">Select a node to see what fires, who acts, and the cost — or press ▶ Play to walk the scenario.</div></aside>
+</div>
+<div class="scn">
+  <div class="step" id="stepN">—</div>
+  <button id="prev">‹ Prev</button>
+  <button class="go" id="play">▶ Play scenario</button>
+  <button id="next">Next ›</button>
+  <div class="cap" id="cap"><span class="hint">Scenario: <b>Maya</b> ships a lending vault, audits it, then lets Sentinel watch it in production.</span></div>
+</div>
+
+<script>
+const NODES = [
+  // lane 0 — pre-launch audit
+  {id:"req", lane:0, owner:"you", title:"Request audit", cost:"$2–3",
+   fires:"You call <code>audit(vault, {tier:'deep'})</code> before deploy — on-demand, no chain involved.",
+   comp:"engine/run.ts · audit()", pov:"“Before mainnet, I want an adversarial pass on my vault — not just a linter.”"},
+  {id:"engine", lane:0, owner:"audit", title:"Multi-agent audit", cost:"$2–3",
+   fires:"Orchestrator fetches source → delegates to 8 auditor subagents (access-control, reentrancy, share-accounting, oracle…) → an <b>adversarial verifier</b> tries to refute each finding → <code>run_simnet_poc</code> reproduces survivors.",
+   comp:"engine/audit.ts + agent/subagents/*", pov:"“It argues with itself — a verifier tries to kill every finding before it reaches me.”"},
+  {id:"report", lane:0, owner:"audit", title:"Report + green PoCs", cost:"—",
+   fires:"Findings labeled honestly: real <b>bug</b> vs <b>centralization/trust</b>. Every confirmed high/critical ships with a <b>green simnet PoC</b> (airgapped repro) — the false-positive control. You fix the bugs.",
+   comp:"findings + simnet/poc", pov:"“A finding with a reproducing exploit I can run is worth ten 'consider reviewing X'.”"},
+  // lane 1 — handoff
+  {id:"distill", lane:1, owner:"audit", title:"Distill → KB candidate", cost:"$0",
+   fires:"<code>bun run distill</code> turns the finished audit into a candidate KB record: archetype, sensitive fns, accepted <b>waivers</b>, and confirmed <b>priorFindings</b> (with PoC). Deterministic where it matters.",
+   comp:"engine/kb-distill.ts", pov:"“The audit shouldn't evaporate — its judgment should arm whatever watches this contract next.”"},
+  {id:"kb", lane:1, owner:"you", title:"Review + promote KB", cost:"—",
+   fires:"You review the candidate and promote it to <code>sentinel/kb/</code>. <b>This record is the audit → monitoring handoff</b>: it's what monitoring watches, and what makes every future re-audit context-aware.",
+   comp:"sentinel/kb/&lt;contract&gt;.json", pov:"“I sign off once on what's a real bug vs an accepted trust assumption — Sentinel won't re-litigate it forever.”"},
+  {id:"prov", lane:1, owner:"mon", title:"Provision chain subs", cost:"—",
+   fires:"<code>provisioner --apply</code> creates one secondlayer <b>chain subscription per sensitive fn</b>, each with a signed-webhook secret. Monitoring is now live for this contract.",
+   comp:"monitoring/provisioner.ts", pov:"“One command and the functions that can move value are now watched on-chain.”"},
+  // lane 2 — monitoring loop
+  {id:"event", lane:2, owner:"mon", title:"Chain event", cost:"$0",
+   fires:"secondlayer fires a <b>signed webhook</b> when a watched fn is called on-chain — e.g. a governance proposal, a large outflow, a new counterparty.",
+   comp:"webhooks/secondlayer-webhook.ts", pov:"“Someone just called a privileged function on my live contract. Now what?”"},
+  {id:"filter", lane:2, owner:"mon", title:"Pre-filter  ≈ $0", cost:"$0",
+   fires:"Verify HMAC → <code>classify()</code>. <b>Most events are benign and dropped with zero spend</b> (below threshold, known counterparty). This cheap gate is what makes 24/7 monitoring affordable.",
+   comp:"monitoring/prefilter.ts", pov:"“I don't want a $3 audit on every routine deposit — only on the stuff that can actually hurt.”"},
+  {id:"benign", lane:2, owner:"drop", title:"Benign → drop (204)", cost:"$0",
+   fires:"Not notable → acknowledge and stop. No audit, no spend, no alert. The common case.",
+   comp:"— returns 204", pov:"“Quiet by default. Silence here means 'nothing worth your attention'.”"},
+  {id:"fire", lane:2, owner:"mon", title:"Notable → reserve + fire", cost:"$0",
+   fires:"Reserve against the daily <b>spend ceiling</b>, then fire the audit engine — <b>tier-routed</b> (governance → deep/Opus; lesser → monitor/Sonnet) and <b>KB-context-aware</b>.",
+   comp:"spend-ceiling + audit-pipeline.ts", pov:"“A governance proposal gets the full panel; a smaller signal gets the cheap one. Budget is capped either way.”"},
+  {id:"reaudit", lane:2, owner:"audit", title:"Re-audit (KB-informed)", cost:"$0.66–$3",
+   fires:"The <b>same engine</b> as pre-launch — now primed with the KB: it re-validates known <b>priorFindings</b> (won't re-downgrade a known bug), suppresses accepted waivers, and reproduces via PoC.",
+   comp:"engine/audit.ts (kb context)", pov:"“It remembers the exploit I already paid to find — so it confirms + reproduces it in minutes, not re-discovers it cold.”"},
+  {id:"adj", lane:2, owner:"mon", title:"Adjudicate", cost:"$0",
+   fires:"Deterministic: drop refuted findings, suppress accepted-waiver matches (warn-once), mark provisional-critical if a PoC is still pending, roll up severity/class from the worst kept finding.",
+   comp:"monitoring/adjudication.ts", pov:"“Turn raw findings into one routable verdict — without another model call I have to trust.”"},
+  {id:"warn", lane:2, owner:"human", title:"Human-gated WARN", cost:"—",
+   fires:"A high/critical confirmed <b>bug</b> with a green PoC pages a WARN. <b>Sentinel never auto-discloses</b> — you decide: disclose (coordinated) / escalate / dismiss.",
+   comp:"monitoring/notify.ts", pov:"“I get woken up only for a reproduced, high-severity bug on my live contract — with the PoC attached. Then I choose the move.”"},
+];
+const EDGES = [
+  ["req","engine"],["engine","report"],["report","distill"],["distill","kb"],["kb","prov"],
+  ["prov","event"],["event","filter"],["filter","benign"],["filter","fire"],["fire","reaudit"],
+  ["reaudit","adj"],["adj","warn"],["warn","kb",true] // loop-back: findings refine the KB
+];
+// scenario path (Maya) — node id + caption
+const SCENE = [
+  ["req","<b>Maya</b> finished her <code>lending-vault.clar</code>. Before mainnet she runs a deep audit — she wants an adversarial pass, not a checklist."],
+  ["engine","Sentinel's panel tears into it: eight specialist auditors, then a verifier that <i>tries to disprove</i> every finding."],
+  ["report","She gets a short list of <b>real bugs</b> (each with a runnable exploit) separated from <b>trust assumptions</b>. She fixes the bugs and re-runs until clean."],
+  ["distill","The audit is distilled into a KB record — archetype, the value-moving functions, accepted waivers, and the confirmed findings + their PoCs."],
+  ["kb","Maya reviews and promotes it. <b>This is the handoff</b>: her one-time judgment now arms everything that watches this contract."],
+  ["prov","One command provisions on-chain subscriptions for the sensitive functions. She deploys. Monitoring is live."],
+  ["event","Weeks later, someone submits a <b>governance proposal</b> that calls a privileged function. secondlayer fires a signed webhook."],
+  ["filter","The pre-filter checks it — governance is always notable, so it passes. (A routine deposit here would've been dropped for $0.)"],
+  ["fire","It's notable: reserve budget, route to <b>deep</b> (governance = full Opus panel), and fire — primed with Maya's KB."],
+  ["reaudit","The same engine re-audits, but it <i>remembers</i> the known socialize-debt bug — it re-confirms and reproduces it with a green PoC in minutes."],
+  ["adj","Adjudication drops noise, keeps the confirmed high-severity bug, and rolls it into one verdict."],
+  ["warn","Maya gets a <b>human-gated WARN</b>: reproduced, high-severity, PoC attached — <i>before</i> the proposal's timelock elapses. She escalates. Sentinel never acted on its own."],
+  ["kb","She tightens the KB from what was learned — sharpening every future check. The loop closes."],
+];
+
+const OWLAB = {you:"You",audit:"Audit engine",mon:"Monitoring",human:"Human gate",drop:"Dropped"};
+const byId = {};
+NODES.forEach(n=>byId[n.id]=n);
+
+// render nodes
+for(const n of NODES){
+  const el=document.createElement("div");
+  el.className="node "+n.owner; el.id="n_"+n.id;
+  el.innerHTML=`<div class="ow"><span>${OWLAB[n.owner]}</span><span class="cost">${n.cost}</span></div>
+    <div class="ti">${n.title}</div><div class="fr">${n.fires.replace(/<[^>]+>/g,'').slice(0,72)}${n.fires.length>72?'…':''}</div>`;
+  el.onclick=()=>select(n.id,true);
+  document.getElementById("c"+n.lane).appendChild(el);
+}
+
+function select(id, manual){
+  const n=byId[id];
+  document.querySelectorAll(".node").forEach(e=>e.classList.remove("active"));
+  document.getElementById("n_"+id).classList.add("active");
+  const d=document.getElementById("drawer");
+  d.innerHTML=`<span class="badge b-${n.owner}">${OWLAB[n.owner]}</span>
+    <h3>${n.title}</h3>
+    <div class="kv"><div class="lab">What fires</div><div class="val">${n.fires}</div></div>
+    <div class="kv"><div class="lab">Cost</div><div class="val"><span class="cost">${n.cost}</span></div></div>
+    <div class="kv"><div class="lab">Component</div><div class="val"><code>${n.comp}</code></div></div>
+    <div class="kv"><div class="lab">Engineer's view</div><div class="pov">${n.pov}</div></div>`;
+  if(manual){stopPlay();}
+}
+
+// draw wires after layout
+const svg=document.getElementById("wires");
+function center(el,host){const r=el.getBoundingClientRect(),h=host.getBoundingClientRect();
+  return {l:r.left-h.left,t:r.top-h.top,w:r.width,h:r.height,cx:r.left-h.left+r.width/2,cy:r.top-h.top+r.height/2};}
+function drawWires(){
+  const host=document.getElementById("lanes");
+  [...svg.querySelectorAll("path")].forEach(p=>p.remove());
+  for(const [a,b,loop] of EDGES){
+    const A=center(document.getElementById("n_"+a),host), B=center(document.getElementById("n_"+b),host);
+    let x1,y1,x2,y2,c1x,c1y,c2x,c2y;
+    if(loop){ // long curve back up the left side
+      x1=A.l; y1=A.cy; x2=B.l; y2=B.cy;
+      c1x=x1-90; c1y=y1; c2x=x2-90; c2y=y2;
+    } else if(Math.abs(B.cx-A.cx)>=Math.abs(B.cy-A.cy)){ // horizontal-ish
+      const right=B.cx>=A.cx; x1=right?A.l+A.w:A.l; y1=A.cy; x2=right?B.l:B.l+B.w; y2=B.cy;
+      const dx=(x2-x1)/2; c1x=x1+dx; c1y=y1; c2x=x2-dx; c2y=y2;
+    } else { // vertical-ish (stacked in a lane)
+      const down=B.cy>=A.cy; x1=A.cx; y1=down?A.t+A.h:A.t; x2=B.cx; y2=down?B.t:B.t+B.h;
+      const dy=(y2-y1)/2; c1x=x1; c1y=y1+dy; c2x=x2; c2y=y2-dy;
+    }
+    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+    p.setAttribute("d",`M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`);
+    p.setAttribute("fill","none");
+    p.setAttribute("stroke",loop?"#5a4316":"#33485f");
+    p.setAttribute("stroke-width",loop?"1.5":"2");
+    if(loop)p.setAttribute("stroke-dasharray","5 5");
+    p.setAttribute("marker-end",`url(#${loop?'arwLoop':'arw'})`);
+    svg.appendChild(p);
+  }
+}
+window.addEventListener("resize",drawWires);
+setTimeout(drawWires,40);
+document.querySelector(".stage").addEventListener("scroll",()=>{},{passive:true});
+
+// scenario player
+let step=-1, timer=null;
+function renderStep(){
+  const [id,cap]=SCENE[step];
+  document.querySelectorAll(".node").forEach(e=>e.classList.add("dim"));
+  // un-dim nodes visited so far
+  SCENE.slice(0,step+1).forEach(([sid])=>document.getElementById("n_"+sid).classList.remove("dim"));
+  select(id,false);
+  document.getElementById("n_"+id).scrollIntoView({behavior:"smooth",block:"center"});
+  document.getElementById("cap").innerHTML=cap;
+  document.getElementById("stepN").textContent=`step ${step+1} / ${SCENE.length}`;
+}
+function go(i){ if(i<0||i>=SCENE.length)return; step=i; renderStep(); }
+function stopPlay(){ if(timer){clearInterval(timer);timer=null;} document.getElementById("play").textContent="▶ Play scenario";
+  document.querySelectorAll(".node").forEach(e=>e.classList.remove("dim")); }
+document.getElementById("next").onclick=()=>{stopPlay();go(Math.min(step+1,SCENE.length-1));};
+document.getElementById("prev").onclick=()=>{stopPlay();go(Math.max(step-1,0));};
+document.getElementById("play").onclick=function(){
+  if(timer){stopPlay();return;}
+  if(step>=SCENE.length-1)step=-1;
+  this.textContent="⏸ Pause"; document.querySelectorAll(".node").forEach(e=>e.classList.add("dim"));
+  go(step+1);
+  timer=setInterval(()=>{ if(step>=SCENE.length-1){stopPlay();return;} go(step+1); },3200);
+};
+</script>
+</body>
+</html>
