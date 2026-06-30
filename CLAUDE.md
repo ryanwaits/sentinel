@@ -88,4 +88,7 @@ bun run test                 # bun tests (monitoring/ webhooks/)
 - Phase 6: container host for the audit worker (Agent SDK subprocess) — Fly/Railway/Render.
 - Re-add discovery (`find_value_contracts`, was an eve tool) as an engine MCP tool wired to a
   token-balances subgraph + USD price feed; same for the `check_clarity_drift` monthly check.
+  **When re-added: never silently return a stub. Emit `mode:"seed-stub"` (or error) on any degraded
+  path — a discovery tool that quietly returns a hard-coded contract is false-confidence, which the
+  credibility rules forbid.**
 - Feed KB/waiver context into `engine/audit` for bug-vs-centralization calibration.
