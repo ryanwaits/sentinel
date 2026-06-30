@@ -34,10 +34,12 @@ export type TriggerContext = {
  * 202 immediately) — so the caller must `.catch()` to avoid an unhandled rejection.
  */
 export async function runTrigger(ctx: TriggerContext): Promise<void> {
-  const result = await audit(ctx.target, { tier: ctx.tier });
+  // The watched contract's KB feeds the audit (context-aware: archetype + sensitive fns + accepted
+  // waivers) AND the adjudicator (waiver suppression). Load it once, up front.
+  const kb = loadRecord(ctx.watchedContractId);
+  const result = await audit(ctx.target, { tier: ctx.tier, kb });
   const sessionId = result.sessionId ?? `audit:${ctx.txId ?? "no-tx"}:${ctx.target}`;
 
-  const kb = loadRecord(ctx.watchedContractId);
   const adjudication = adjudicateFindings({
     sessionId,
     contractId: ctx.watchedContractId,

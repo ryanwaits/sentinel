@@ -12,6 +12,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { type Finding, SentinelFindings } from "../monitoring/adjudication";
+import type { KBRecord } from "../monitoring/kb";
 import type { Tier } from "../monitoring/spend-ceiling";
 import { FINDINGS_SCHEMA } from "./findings";
 import { FETCH_TOOL, POC_TOOL, sentinelServer } from "./tools";
@@ -50,7 +51,31 @@ function loadSubagents(panel: Panel): NonNullable<Options["agents"]> {
   return agents;
 }
 
-function orchestratorSystem(panel: Panel): string {
+/**
+ * Prior-audit context from the watched contract's KB record — makes the audit CONTEXT-AWARE: the
+ * panel knows the archetype + already-known sensitive fns, and (load-bearing for calibration) does
+ * NOT re-litigate accepted centralization/trust waivers as fresh criticals.
+ */
+function kbContextBlock(kb: KBRecord): string {
+  const fns =
+    kb.sensitiveFns.map((f) => `${f.name} (${f.triggerClass})`).join(", ") || "(none recorded)";
+  const waivers = kb.waivers.length
+    ? kb.waivers
+        .map((w) => `  - ${w.finding} [${w.label}]${w.note ? ` — ${w.note}` : ""}`)
+        .join("\n")
+    : "  (none)";
+  return `
+
+## Prior audit context (KB) for ${kb.contractId} — baseline-audited as a "${kb.archetype}"
+Known sensitive functions: ${fns}.
+ACCEPTED centralization/trust waivers (already reviewed and accepted — do NOT re-report these as new
+critical bugs; if you encounter one, label class "centralization"/"info" and note it is a known
+accepted assumption, not a novel finding):
+${waivers}
+Focus on NEW bugs, regressions, or anything OUTSIDE these accepted assumptions.`;
+}
+
+function orchestratorSystem(panel: Panel, kbContext = ""): string {
   const delegate =
     panel === "full"
       ? `Delegate EXACTLY ONCE to each relevant auditor-* subagent (${AUDITOR_DIMS}) - fire them in parallel, ONE Task per dimension. Prioritise auditor-access-control, auditor-governance, auditor-share-accounting for a vault/DAO target.`
@@ -63,13 +88,13 @@ Process (each step ONCE, in order, then stop):
 3. Collect the candidate findings, then verify them in a SINGLE verifier Task call: pass the verifier the FULL contract source AND the complete list of candidate findings at once (NOT one call per finding). It refutes false positives under Clarity semantics - especially internal-vs-live-balance accounting (share price off a data-var, not ft-get-balance, defeats donation/inflation), underflow/overflow ABORT, reverts roll back all state, ft-mint?/ft-burn? of 0 reverts. Mark refuted findings verifierVerdict "refuted" (keep them).
 4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE: pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE - then STOP (never retry, re-verify, or re-delegate).
 5. Return the structured findings object and end your turn. Do not keep working after you have it.
-Label findings honestly: real bug vs centralization/trust.`;
+Label findings honestly: real bug vs centralization/trust.${kbContext}`;
 }
 
-function auditOptions(model: string, panel: Panel, effort: Effort): Options {
+function auditOptions(model: string, panel: Panel, effort: Effort, kbContext: string): Options {
   return {
     model,
-    systemPrompt: orchestratorSystem(panel),
+    systemPrompt: orchestratorSystem(panel, kbContext),
     agents: loadSubagents(panel),
     mcpServers: { sentinel: { type: "sdk", name: "sentinel", instance: sentinelServer.instance } },
     allowedTools: [FETCH_TOOL, POC_TOOL, "Task", "Agent"],
@@ -125,6 +150,8 @@ export async function audit(
     model?: string;
     panel?: Panel;
     effort?: Effort;
+    /** Prior-audit context (the watched contract's KB record) — makes the audit context-aware. */
+    kb?: KBRecord | null;
     onTool?: (name: string, elapsedMs: number) => void;
   } = {},
 ): Promise<AuditResult> {
@@ -132,6 +159,7 @@ export async function audit(
   const model = opts.model ?? d.model;
   const panel = opts.panel ?? d.panel;
   const effort = opts.effort ?? d.effort;
+  const kbContext = opts.kb ? kbContextBlock(opts.kb) : "";
 
   const prompt = `Audit this deployed Clarity contract for asset-safety bugs: ${contractId}\n\nFetch its source (closure=true), delegate to the auditor subagents, adversarially verify each finding, reproduce confirmed high/critical with the PoC tool, and return the structured findings.`;
 
@@ -140,7 +168,10 @@ export async function audit(
   let subagentTasks = 0;
   let result: Record<string, unknown> | null = null;
 
-  for await (const msg of query({ prompt, options: auditOptions(model, panel, effort) })) {
+  for await (const msg of query({
+    prompt,
+    options: auditOptions(model, panel, effort, kbContext),
+  })) {
     if (msg.type === "assistant") {
       for (const block of (msg.message?.content ?? []) as Array<{ type: string; name?: string }>) {
         if (block.type === "tool_use") {

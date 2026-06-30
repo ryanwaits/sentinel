@@ -5,16 +5,22 @@
  * Prints native metrics + the structured findings.
  */
 
+import { loadRecord } from "../monitoring/kb";
 import type { Tier } from "../monitoring/spend-ceiling";
 import { audit } from "./audit";
 
 const contractId = process.argv[2] ?? "SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.v0-vault-sbtc";
 const tier = (process.argv[3] as Tier) ?? "deep";
 
-console.log(`=== audit ===\ntarget: ${contractId}\ntier:   ${tier}\n`);
+// Context-aware if we've audited this contract before (KB record present).
+const kb = loadRecord(contractId);
+console.log(
+  `=== audit ===\ntarget: ${contractId}\ntier:   ${tier}\nKB:     ${kb ? `${kb.archetype}, ${kb.waivers.length} waiver(s)` : "(none)"}\n`,
+);
 
 const res = await audit(contractId, {
   tier,
+  kb,
   onTool: (name, ms) => console.log(`[${(ms / 60000).toFixed(1)}m] tool: ${name}`),
 });
 
