@@ -2,7 +2,43 @@
  * Adjudication tests — deterministic verdict from a report's [SENTINEL-FINDINGS] block. No spend.
  */
 import { describe, expect, test } from "bun:test";
-import { adjudicate, extractFindings, type Finding } from "./adjudication";
+import { adjudicate, adjudicateFindings, extractFindings, type Finding } from "./adjudication";
+
+describe("rollup: severity + class both come from the worst-severity kept finding", () => {
+  const f = (over: Partial<Finding>): Finding => ({
+    title: "f",
+    severity: "low",
+    class: "bug",
+    verifierVerdict: "confirmed",
+    pocStatus: "na",
+    ...over,
+  });
+  test("high centralization + low bug → severity high, class centralization (low bug doesn't hijack class)", () => {
+    const a = adjudicateFindings({
+      sessionId: "s",
+      contractId: "x",
+      tokenCostUsd: 0,
+      findings: [
+        f({ title: "drain", severity: "high", class: "centralization" }),
+        f({ title: "nit", severity: "low", class: "bug" }),
+      ],
+    });
+    expect(a.severity).toBe("high");
+    expect(a.class).toBe("centralization");
+  });
+  test("tie at same severity → bug outranks centralization", () => {
+    const a = adjudicateFindings({
+      sessionId: "s",
+      contractId: "x",
+      tokenCostUsd: 0,
+      findings: [
+        f({ severity: "high", class: "centralization" }),
+        f({ severity: "high", class: "bug" }),
+      ],
+    });
+    expect(a.class).toBe("bug");
+  });
+});
 
 const WAIVER = [
   {

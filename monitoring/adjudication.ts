@@ -98,9 +98,8 @@ const SEVERITY_RANK: Record<Severity, number> = {
 };
 const HIGH_OR_CRIT = (s: Severity) => s === "critical" || s === "high";
 
-function worseSeverity(a: Severity, b: Severity): Severity {
-  return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b;
-}
+/** Tie-break at equal severity: a real bug outranks a centralization outranks info. */
+const CLASS_RANK: Record<FindingClass, number> = { bug: 2, centralization: 1, info: 0 };
 
 function normalize(s: string): string {
   return s
@@ -191,17 +190,18 @@ export function adjudicateFindings(input: {
   const kept = adjudicated.filter((f) => f.kept);
   const suppressed = adjudicated.filter((f) => f.disposition === "waived").map((f) => f.title);
 
-  let severity: Severity = "info";
-  let cls: FindingClass = "info";
-  let provisional = false;
-  let needsHuman = false;
-  for (const f of kept) {
-    severity = worseSeverity(severity, f.severity);
-    if (f.class === "bug") cls = "bug";
-    else if (f.class === "centralization" && cls !== "bug") cls = "centralization";
-    if (f.provisional) provisional = true;
-    if (f.verifierVerdict === "uncertain") needsHuman = true;
-  }
+  // The "lead" finding = the worst-severity kept finding (bug-over-centralization tie-break). Both the
+  // headline severity AND class come from it, so they can't be sourced from different findings (e.g. a
+  // low bug hijacking the class while a high centralization drives the severity).
+  const lead = [...kept].sort(
+    (a, b) =>
+      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
+      CLASS_RANK[b.class] - CLASS_RANK[a.class],
+  )[0];
+  const severity: Severity = lead?.severity ?? "info";
+  const cls: FindingClass = lead?.class ?? "info";
+  const provisional = kept.some((f) => f.provisional);
+  const needsHuman = kept.some((f) => f.verifierVerdict === "uncertain");
 
   // Alert level: any kept high/critical ⇒ WARN (human-gated); lesser kept ⇒ INFO; nothing ⇒ NONE.
   const hasHighCrit = kept.some((f) => HIGH_OR_CRIT(f.severity));
@@ -213,7 +213,6 @@ export function adjudicateFindings(input: {
       ? "green"
       : "na";
 
-  const lead = kept[0];
   const recommendedAction =
     kept.length === 0
       ? suppressed.length > 0
