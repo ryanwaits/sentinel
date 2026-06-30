@@ -43,7 +43,9 @@ function loadSubagents(panel: Panel): NonNullable<Options["agents"]> {
         .split("\n")
         .find((l) => l.trim())
         ?.slice(0, 200) ?? name;
-    agents[name] = { description, prompt, tools: [], model: "inherit" };
+    // Give subagents the source tool as a fallback: if the orchestrator's inlined source is
+    // incomplete, they fetch it themselves rather than returning "could not access source".
+    agents[name] = { description, prompt, tools: [FETCH_TOOL], model: "inherit", maxTurns: 6 };
   }
   return agents;
 }
@@ -51,16 +53,17 @@ function loadSubagents(panel: Panel): NonNullable<Options["agents"]> {
 function orchestratorSystem(panel: Panel): string {
   const delegate =
     panel === "full"
-      ? `Delegate IN PARALLEL to every relevant auditor-* subagent (${AUDITOR_DIMS}) via the Task tool — at minimum auditor-access-control, auditor-governance, and auditor-share-accounting for a vault/DAO target. Pass each the FULL fetched source inline (they have no fetch tool).`
-      : `Delegate a focused review to the auditor-share-accounting subagent (Task tool): pass it the FULL fetched source inline (it has no fetch tool).`;
-  return `You are Audit Sentinel, a Stacks/Clarity smart-contract security auditor.
+      ? `Delegate EXACTLY ONCE to each relevant auditor-* subagent (${AUDITOR_DIMS}) - fire them in parallel, ONE Task per dimension. Prioritise auditor-access-control, auditor-governance, auditor-share-accounting for a vault/DAO target.`
+      : `Delegate EXACTLY ONCE to the auditor-share-accounting subagent (one Task).`;
+  return `You are Audit Sentinel, a Stacks/Clarity smart-contract security auditor. Work EFFICIENTLY - do not over-delegate, re-delegate, or loop.
 
-Audit the target contract for asset-safety bugs. Process:
-1. Fetch the target's full source with the ${FETCH_TOOL} tool (closure=true to pull in dependencies). This is the ONLY way to read source — never use Bash, WebFetch, WebSearch, Read, Grep, or Glob.
-2. ${delegate}
-3. Adversarially verify every candidate finding with the verifier subagent: pass it the finding + the relevant source inline. Default to skepticism under Clarity semantics (underflow/overflow ABORT; reverts roll back all state; ft-mint?/ft-burn? of 0 reverts). Drop hallucinated findings.
-4. Reproduce any CONFIRMED high/critical finding with ${POC_TOOL}: pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE. Do not loop on an unavailable sandbox.
-Label findings honestly: real bug vs centralization/trust. Include refuted findings with verifierVerdict "refuted". Return ONLY the structured findings object.`;
+Process (each step ONCE, in order, then stop):
+1. Fetch the target's full source with ${FETCH_TOOL} (closure=true). This is the ONLY way to read source - never use Bash, WebFetch, WebSearch, Read, Grep, or Glob.
+2. ${delegate} In each delegation prompt, PASTE THE FULL fetched source verbatim (the subagent also has ${FETCH_TOOL} as a fallback, but inline it so it doesn't have to). Do NOT spawn any subagent more than once.
+3. Collect the candidate findings, then verify them in a SINGLE verifier Task call: pass the verifier the FULL contract source AND the complete list of candidate findings at once (NOT one call per finding). It refutes false positives under Clarity semantics - especially internal-vs-live-balance accounting (share price off a data-var, not ft-get-balance, defeats donation/inflation), underflow/overflow ABORT, reverts roll back all state, ft-mint?/ft-burn? of 0 reverts. Mark refuted findings verifierVerdict "refuted" (keep them).
+4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE: pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE - then STOP (never retry, re-verify, or re-delegate).
+5. Return the structured findings object and end your turn. Do not keep working after you have it.
+Label findings honestly: real bug vs centralization/trust.`;
 }
 
 function auditOptions(model: string, panel: Panel, effort: Effort): Options {
