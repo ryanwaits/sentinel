@@ -14,6 +14,7 @@ const f = (over: Partial<Finding>): Finding => ({
   verifierVerdict: "confirmed",
   pocStatus: "na",
   ...over,
+  origin: over.origin ?? "audit",
 });
 
 const opts = { client: "acme", auditedAt: "2026-06-30" };
@@ -76,5 +77,72 @@ describe("buildKBCandidate", () => {
     const r = await buildKBCandidate("SP.z", [], undefined, opts);
     expect(r.archetype).toBe("other");
     expect(r.sensitiveFns).toEqual([]);
+  });
+});
+
+describe("buildKBCandidate — audit generates the monitoring scope", () => {
+  const kbc = {
+    archetype: "vault" as const,
+    sensitiveFns: [
+      {
+        name: "socialize-debt",
+        triggerClass: "governance.proxy_upgrade" as const,
+        callerAllowlist: [],
+      },
+      {
+        name: "withdraw",
+        triggerClass: "transfer.outflow" as const,
+        callerAllowlist: [],
+        suggestedOutflowThreshold: { asset: "stx", amount: "1000000" },
+        outflowThreshold: { asset: "stx", amount: "5" }, // audit must NOT set the live gate
+      },
+    ],
+  };
+
+  test("confirmed bug whose targetFn ∈ sensitiveFns → emits a Type-2 signature", async () => {
+    const r = await buildKBCandidate(
+      "SP.v",
+      [
+        f({
+          title: "unbounded loss",
+          severity: "high",
+          verifierVerdict: "confirmed",
+          targetFn: "socialize-debt",
+          targetAsset: "sbtc",
+          precondition: "amount uncapped",
+        }),
+      ],
+      kbc,
+      opts,
+    );
+    const sig = r.priorFindings[0]?.signature;
+    expect(sig?.fn).toBe("socialize-debt");
+    expect(sig?.asset).toBe("sbtc");
+    expect(sig?.precondition).toBe("amount uncapped");
+    expect(sig?.triggerClass).toBe("transfer.outflow"); // targetAsset present ⇒ outflow signature
+  });
+
+  test("targetFn NOT in sensitiveFns → no signature (context-only, never fabricated)", async () => {
+    const r = await buildKBCandidate(
+      "SP.v",
+      [
+        f({
+          title: "ghost",
+          severity: "high",
+          verifierVerdict: "confirmed",
+          targetFn: "not-a-watched-fn",
+        }),
+      ],
+      kbc,
+      opts,
+    );
+    expect(r.priorFindings[0]?.signature).toBeUndefined();
+  });
+
+  test("audit SUGGESTS thresholds but never sets the LIVE gate", async () => {
+    const r = await buildKBCandidate("SP.v", [], kbc, opts);
+    const withdraw = r.sensitiveFns.find((s) => s.name === "withdraw");
+    expect(withdraw?.suggestedOutflowThreshold).toEqual({ asset: "stx", amount: "1000000" });
+    expect(withdraw?.outflowThreshold).toBeUndefined(); // human promotes; prefilter only reads live
   });
 });

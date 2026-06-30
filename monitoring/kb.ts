@@ -13,19 +13,21 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { Archetype, MonitoringConfig, SensitiveFn, tierForArchetype } from "./config";
+// CentralizationWaiver + FindingSignature live in config.ts (kb -> config is the safe import direction).
+import {
+  Archetype,
+  CentralizationWaiver,
+  FindingSignature,
+  MonitoringConfig,
+  SensitiveFn,
+  tierForArchetype,
+} from "./config";
 
 export const KB_DIR = process.env.SENTINEL_KB_DIR ?? join(process.cwd(), "sentinel", "kb");
 
-/** An accepted centralization/trust finding — surfaced once, then suppressed (not a re-pageable bug). */
-export const CentralizationWaiver = z.object({
-  finding: z.string(),
-  label: z.enum(["centralization", "by-design", "info", "low"]),
-  note: z.string().optional(),
-});
-
 /** A confirmed finding from a prior audit — carried forward so the next audit re-validates (and
- *  reproduces) it instead of re-deriving its severity/class from scratch (the calibration anchor). */
+ *  reproduces) it instead of re-deriving its severity/class from scratch (the calibration anchor).
+ *  Its optional `signature` is what Type-2 monitoring watches for being exploited. */
 export const PriorFinding = z.object({
   title: z.string(),
   severity: z.enum(["critical", "high", "medium", "low", "info"]).default("high"),
@@ -33,6 +35,8 @@ export const PriorFinding = z.object({
   note: z.string().optional(),
   /** A baked PoC that reproduces it (e.g. "poc/finding-1.ts") — the engine re-runs it for a green PoC. */
   pocFile: z.string().optional(),
+  /** Type-2 detection signature distilled from this finding (the bug becomes a monitoring signal). */
+  signature: FindingSignature.optional(),
 });
 
 /** What an audit recorded about one contract. Source of truth for `deriveConfig`. */
@@ -97,6 +101,10 @@ export function deriveConfig(contractId: string): MonitoringConfig {
     archetype: rec.archetype,
     tier: tierForArchetype(rec.archetype),
     sensitiveFns: rec.sensitiveFns,
+    // Project what the record carries but deriveConfig used to drop: waivers (warn-once suppression)
+    // and the Type-2 detection signatures distilled from confirmed findings.
+    waivers: rec.waivers,
+    signatures: rec.priorFindings.flatMap((f) => (f.signature ? [f.signature] : [])),
     closure: rec.closure,
     route: "default",
     baselineAudited: rec.baselineAudited,

@@ -90,7 +90,8 @@ Focus on re-confirming the known findings + any NEW bugs/regressions outside the
 
 function orchestratorSystem(panel: Panel, kbContext = "", distillKB = false): string {
   const kbStep = distillKB
-    ? `\n6. ALSO emit "kbCandidate" for KB distillation: classify the contract's archetype (governance-dao | vault | amm | treasury | token | other) and list its sensitive/privileged functions — for each, the name, the closest triggerClass (governance.proposal_submitted | governance.proxy_upgrade | counterparty.new | transfer.outflow), and the authorized callers you can identify from its auth checks (callerAllowlist; [] if open/unclear).`
+    ? `\n6. ALSO emit "kbCandidate" for KB distillation: classify the contract's archetype (governance-dao | vault | amm | treasury | token | other) and list its sensitive/privileged functions — for each: the name, the closest triggerClass (governance.proposal_submitted | governance.proxy_upgrade | counterparty.new | transfer.outflow), the authorized callers from its auth checks (callerAllowlist; [] if open/unclear), and for transfer.outflow fns a suggestedOutflowThreshold {asset, amount} read from any on-chain cap in the source — OMIT it if there is no cap (never guess 0/null).
+7. For each CONFIRMED bug finding, also set targetFn (the function it concerns), targetAsset (ft id or 'stx' if it's an outflow bug), and precondition (the condition under which it is exploitable) — these distil into the Type-2 monitoring signatures that watch this contract post-launch.`
     : "";
   const delegate =
     panel === "full"

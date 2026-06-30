@@ -22,6 +22,20 @@ export const FINDINGS_SCHEMA = {
           confidence: { type: "number" },
           blastRadius: { type: "string" },
           recommendedAction: { type: "string" },
+          targetFn: {
+            type: "string",
+            description:
+              "the function this finding concerns (anchors a Type-2 detection signature)",
+          },
+          targetAsset: {
+            type: "string",
+            description: "asset at risk for an outflow-class bug: ft identifier or 'stx'",
+          },
+          precondition: {
+            type: "string",
+            description:
+              "the condition under which the bug is exploitable (the human's discriminator on a runtime match)",
+          },
         },
         required: [
           "title",
@@ -70,6 +84,14 @@ export const KB_DISTILL_SCHEMA = {
                 ],
               },
               callerAllowlist: { type: "array", items: { type: "string" } },
+              suggestedOutflowThreshold: {
+                type: "object",
+                additionalProperties: false,
+                description:
+                  "for a transfer.outflow fn ONLY: a SUGGESTED starting threshold from an on-chain cap you can identify in the source. OMIT entirely if there is no cap (never guess 0/null) — advisory, a human promotes it.",
+                properties: { asset: { type: "string" }, amount: { type: "string" } },
+                required: ["asset", "amount"],
+              },
             },
             required: ["name", "triggerClass", "callerAllowlist"],
           },

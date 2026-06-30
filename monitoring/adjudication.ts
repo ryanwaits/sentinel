@@ -38,6 +38,14 @@ export const Finding = z.object({
   confidence: z.number().min(0).max(1).optional(),
   blastRadius: z.string().optional(),
   recommendedAction: z.string().optional(),
+  /** Where the finding came from: an "audit" (default) or Type-2 "incident" triage. */
+  origin: z.enum(["audit", "incident"]).default("audit"),
+  /** The function this finding concerns — anchors a Type-2 detection signature (see kb-distill). */
+  targetFn: z.string().optional(),
+  /** Asset at risk for an outflow-class bug (ft id or 'stx') — narrows the signature match. */
+  targetAsset: z.string().optional(),
+  /** The condition under which the bug is exploitable — the human's discriminator on a Type-2 match. */
+  precondition: z.string().optional(),
 });
 export type Finding = z.infer<typeof Finding>;
 
@@ -71,6 +79,8 @@ export type Adjudication = {
   suppressed: string[];
   recommendedAction: string;
   tokenCostUsd: number;
+  /** Provenance of the kept findings — splits the PREVENTION (audit) vs DETECTION (incident) lane. */
+  origin?: "audit" | "incident" | "mixed";
 };
 
 const OPEN = "[SENTINEL-FINDINGS]";
@@ -150,6 +160,7 @@ export function adjudicate(input: {
       recommendedAction:
         "No [SENTINEL-FINDINGS] block in the report — manual review required. Disclosure human-gated.",
       tokenCostUsd: usage.costUsd,
+      origin: "audit",
     };
   }
   return adjudicateFindings({
@@ -203,6 +214,10 @@ export function adjudicateFindings(input: {
   const provisional = kept.some((f) => f.provisional);
   const needsHuman = kept.some((f) => f.verifierVerdict === "uncertain");
 
+  // Provenance of the kept findings: all-audit / all-incident / mixed — splits prevention vs detection.
+  const origins = new Set(kept.map((f) => f.origin ?? "audit"));
+  const origin = origins.size <= 1 ? ([...origins][0] ?? "audit") : "mixed";
+
   // Alert level: any kept high/critical ⇒ WARN (human-gated); lesser kept ⇒ INFO; nothing ⇒ NONE.
   const hasHighCrit = kept.some((f) => HIGH_OR_CRIT(f.severity));
   const alertLevel: AlertLevel = hasHighCrit ? "warn" : kept.length > 0 ? "info" : "none";
@@ -234,5 +249,6 @@ export function adjudicateFindings(input: {
     suppressed,
     recommendedAction,
     tokenCostUsd,
+    origin,
   };
 }

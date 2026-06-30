@@ -12,6 +12,7 @@ describe("rollup: severity + class both come from the worst-severity kept findin
     verifierVerdict: "confirmed",
     pocStatus: "na",
     ...over,
+    origin: over.origin ?? "audit",
   });
   test("high centralization + low bug → severity high, class centralization (low bug doesn't hijack class)", () => {
     const a = adjudicateFindings({

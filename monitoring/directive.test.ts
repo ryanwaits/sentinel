@@ -20,6 +20,8 @@ const treasuryConfig: MonitoringConfig = {
   archetype: "treasury",
   tier: "deep",
   sensitiveFns: [],
+  signatures: [],
+  waivers: [],
   closure: [DAO],
   route: "default",
   baselineAudited: true,

@@ -43,6 +43,17 @@ export async function buildKBCandidate(
     // node miss — leave closure empty; human/re-run fills it.
   }
 
+  // Class-aware sanitisation: counterparty allowlists drop events as benign → never auto-fill them.
+  // The LIVE outflowThreshold stays UNSET (a human promotes it); the audit's SUGGESTED threshold
+  // (suggestedOutflowThreshold, advisory — prefilter never reads it) is preserved by the spread.
+  const sensitiveFns = (kbCandidate?.sensitiveFns ?? []).map((fn) => {
+    const sf = { ...fn };
+    delete sf.outflowThreshold; // never let the audit set the live gate
+    if (sf.triggerClass === "counterparty.new") sf.callerAllowlist = [];
+    return sf;
+  });
+  const fnNames = new Set(sensitiveFns.map((f) => f.name));
+
   const confirmed = findings.filter((f) => f.verifierVerdict === "confirmed");
   const waivers = confirmed
     .filter((f) => f.class === "centralization")
@@ -58,16 +69,20 @@ export async function buildKBCandidate(
       severity: f.severity,
       class: "bug" as const,
       note: f.blastRadius ?? f.recommendedAction,
+      // Type-2 detection signature — ONLY when the finding names a watched function (never fabricate;
+      // an unanchored finding stays context-only). The proven bug becomes a monitoring signal.
+      signature:
+        f.targetFn && fnNames.has(f.targetFn)
+          ? {
+              title: f.title,
+              fn: f.targetFn,
+              asset: f.targetAsset,
+              severity: f.severity,
+              precondition: f.precondition,
+              triggerClass: f.targetAsset ? ("transfer.outflow" as const) : undefined,
+            }
+          : undefined,
     }));
-
-  // Class-aware sanitisation: counterparty allowlists drop events as benign → never auto-fill them;
-  // drop any proposed outflowThreshold (a human sets that, or it silently suppresses real drains).
-  const sensitiveFns = (kbCandidate?.sensitiveFns ?? []).map((fn) => {
-    const sf = { ...fn };
-    delete sf.outflowThreshold;
-    if (sf.triggerClass === "counterparty.new") sf.callerAllowlist = [];
-    return sf;
-  });
 
   return KBRecordSchema.parse({
     contractId,
