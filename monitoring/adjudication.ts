@@ -134,8 +134,6 @@ export function adjudicate(input: {
   trigger?: TriggerRecord | null;
 }): Adjudication {
   const { sessionId, contractId, report, usage } = input;
-  const waivers = input.waivers ?? [];
-  const tokenCostUsd = usage.costUsd;
   const parsed = extractFindings(report);
 
   // No machine-readable block ⇒ degrade to a human-review WARN (don't silently pass).
@@ -153,11 +151,33 @@ export function adjudicate(input: {
       suppressed: [],
       recommendedAction:
         "No [SENTINEL-FINDINGS] block in the report — manual review required. Disclosure human-gated.",
-      tokenCostUsd,
+      tokenCostUsd: usage.costUsd,
     };
   }
+  return adjudicateFindings({
+    sessionId,
+    contractId,
+    findings: parsed.findings,
+    tokenCostUsd: usage.costUsd,
+    waivers: input.waivers,
+  });
+}
 
-  const adjudicated: AdjudicatedFinding[] = parsed.findings.map((f) => {
+/**
+ * Adjudicate findings DIRECTLY (the Agent-SDK path: `engine/audit` returns validated findings, so
+ * there's no report text to parse). `adjudicate({report})` parses then calls this.
+ */
+export function adjudicateFindings(input: {
+  sessionId: string;
+  contractId: string;
+  findings: Finding[];
+  tokenCostUsd: number;
+  waivers?: KBRecord["waivers"];
+}): Adjudication {
+  const { sessionId, contractId, tokenCostUsd } = input;
+  const waivers = input.waivers ?? [];
+
+  const adjudicated: AdjudicatedFinding[] = input.findings.map((f) => {
     if (f.verifierVerdict === "refuted") {
       return { ...f, kept: false, disposition: "refuted", provisional: false };
     }

@@ -108,6 +108,8 @@ export type AuditResult = {
   model: string;
   panel: Panel;
   tier?: Tier;
+  /** The SDK session id (traceability / ledger key). */
+  sessionId?: string;
   status: "success" | "error" | "incomplete";
   findings: Finding[];
   metrics: AuditMetrics;
@@ -175,6 +177,7 @@ export async function audit(
     model,
     panel,
     tier: opts.tier,
+    sessionId: result.session_id as string | undefined,
     status: result.subtype === "success" ? "success" : "incomplete",
     findings,
     metrics: {

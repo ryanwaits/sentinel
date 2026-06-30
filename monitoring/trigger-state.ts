@@ -112,7 +112,28 @@ export function commitDispatch(key: string, record: TriggerRecord): void {
   save(state);
 }
 
-/** A trigger record by eve session id (M4). */
+/**
+ * Mark an event dispatched — sets the dedup key + debounce window NOW, at dispatch time, so a
+ * re-delivery during the (minutes-long) async audit is deduped. The trigger→session ledger record
+ * is written later via `recordSession` once the audit returns a session id.
+ */
+export function markDispatched(key: string, contractId: string, fn: string): void {
+  const state = load();
+  const now = Date.now();
+  state.seen[key] = now;
+  state.debounce[`${contractId}:${fn}`] = now;
+  pruneSeen(state, now);
+  save(state);
+}
+
+/** Write the trigger→session ledger record (after the async audit completes). */
+export function recordSession(record: TriggerRecord): void {
+  const state = load();
+  state.records[record.sessionId] = record;
+  save(state);
+}
+
+/** A trigger record by session id (M4). */
 export function getRecord(sessionId: string): TriggerRecord | null {
   return load().records[sessionId] ?? null;
 }

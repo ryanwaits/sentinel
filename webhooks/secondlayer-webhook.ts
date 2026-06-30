@@ -1,43 +1,33 @@
 /**
- * secondlayer subscription -> eve  (HTTP webhook ingress bridge — the audit-on-trigger core, M3)
+ * secondlayer subscription -> audit()  (HTTP webhook ingress bridge — the audit-on-trigger core)
  *
  * A secondlayer CHAIN subscription POSTs a decoded chain event here. The bridge:
- *   1. verifies the Standard-Webhooks signature (per-subscription secret, resolved by the ruleKey
- *      in the URL path);
+ *   1. verifies the Standard-Webhooks signature (per-subscription secret, resolved by the ruleKey);
  *   2. drops reorg rollbacks + de-duplicates re-deliveries / replays;
  *   3. loads the watched contract's MonitoringConfig and runs the consumer PRE-FILTER — benign
  *      events are logged + 204'd with ZERO spend;
- *   4. for a notable event, builds the audit_targets[] (decoded proposal + its live closure for
- *      governance; the watched contract + KB closure for context) and a [SENTINEL-TRIGGER]
- *      directive;
- *   5. reserves the tier's estimated cost against the daily spend ceiling BEFORE dispatching;
- *   6. routes to the tier's eve deployment (Deep=Opus / Monitor=Sonnet), captures the session id,
- *      and records trigger→session metadata for M4 adjudication.
- * The server owns retry/backoff/dead-letter; the bridge just stays idempotent and returns 2xx.
+ *   4. for a notable event, decodes the audit target (proposal principal for governance) + tier +
+ *      deadline_block, reserves the tier estimate against the daily ceiling, marks dedup/debounce,
+ *      and fires `runTrigger` ASYNC (audit → adjudicate → human-gated notify) — returning 202.
  *
- * Lives OUTSIDE agent/ so eve's channel discovery doesn't compile it as a native channel. Run as a
- * tiny Bun/Vercel function:  bun run webhooks/secondlayer-webhook.ts   (PORT=3001 by default)
+ * Migrated off eve: the audit runs in-process via the Claude Agent SDK (engine/audit + the
+ * audit-pipeline), direct to Anthropic. The audit takes minutes, so it runs detached (the bridge
+ * marks dedup at dispatch so a re-delivery during the run can't double-fire). On a container host the
+ * detached task survives; a job queue is the prod upgrade. Run: bun run webhooks/secondlayer-webhook.ts.
  *
- * Env: EVE_SESSION_URL (fallback), EVE_DEEP_SESSION_URL / EVE_MONITOR_SESSION_URL (tier routing),
- *      SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret).
+ * Env: SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret); ANTHROPIC_API_KEY + STACKS_NODE_URL
+ *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
 import { verifyWebhookSignature } from "@secondlayer/sdk";
+import { runTrigger } from "../monitoring/audit-pipeline";
 import { buildDirective, tierFor } from "../monitoring/directive";
-import { eveAuthEnabled, mintEveSessionToken } from "../monitoring/eve-jwt";
 import { deriveConfig } from "../monitoring/kb";
 import { type ChainEventBody, classify } from "../monitoring/prefilter";
-import { reserve, type Tier } from "../monitoring/spend-ceiling";
+import { reserve } from "../monitoring/spend-ceiling";
 import { getByRuleKey } from "../monitoring/sub-store";
-import { commitDispatch, dedupKey, inDebounce, isDuplicate } from "../monitoring/trigger-state";
+import { dedupKey, inDebounce, isDuplicate, markDispatched } from "../monitoring/trigger-state";
 
 const FALLBACK_SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
-const FALLBACK_SESSION_URL = process.env.EVE_SESSION_URL ?? "http://127.0.0.1:3000/eve/v1/session";
-
-/** Pick the eve deployment for a tier (Deep=Opus / Monitor=Sonnet); fall back to the single URL. */
-function sessionUrlForTier(tier: Tier): string {
-  if (tier === "deep") return process.env.EVE_DEEP_SESSION_URL ?? FALLBACK_SESSION_URL;
-  return process.env.EVE_MONITOR_SESSION_URL ?? FALLBACK_SESSION_URL;
-}
 
 const GOVERNANCE_CLASSES = ["governance.proposal_submitted", "governance.proxy_upgrade"];
 
@@ -74,36 +64,6 @@ function markHandled(id: string | undefined): void {
 /** Resolve the ruleKey from the request path (`/<ruleKey>`), URL-decoded. */
 function ruleKeyFromPath(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ""));
-}
-
-/** Dispatch the directive to eve and return the created session id (best-effort capture). */
-async function dispatchToEve(
-  message: string,
-  tier: Tier,
-): Promise<{ ok: boolean; sessionId: string | null; status: number }> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (eveAuthEnabled()) headers.authorization = `Bearer ${mintEveSessionToken()}`;
-  const res = await fetch(sessionUrlForTier(tier), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ message }),
-  });
-  let sessionId: string | null = null;
-  const bodyText = await res.text().catch(() => "");
-  try {
-    const body = JSON.parse(bodyText) as Record<string, unknown>;
-    const session = body.session as Record<string, unknown> | undefined;
-    sessionId =
-      (body.sessionId as string) ?? (body.id as string) ?? (session?.id as string) ?? null;
-  } catch {
-    // non-JSON body
-  }
-  // Fallback: a Location header like /eve/v1/session/<id>.
-  if (!sessionId) {
-    const loc = res.headers.get("location");
-    if (loc) sessionId = loc.split("/").filter(Boolean).pop() ?? null;
-  }
-  return { ok: res.ok, sessionId, status: res.status };
 }
 
 export async function handle(req: Request): Promise<Response> {
@@ -202,41 +162,36 @@ export async function handle(req: Request): Promise<Response> {
     GOVERNANCE_CLASSES.includes(fn.triggerClass) && payload.block_height
       ? payload.block_height + TIMELOCK_BLOCKS
       : null;
-  const { message, directive } = await buildDirective(
-    config,
-    fn,
-    event as ChainEventBody,
-    verdict,
-    {
-      txId: payload.tx_id,
-      blockHeight: payload.block_height,
-      deadlineBlock,
-    },
-  );
-  const dispatch = await dispatchToEve(message, tier);
-  if (!dispatch.ok) {
-    // transient — let the server retry (do NOT mark handled).
-    return new Response("eve error", { status: 502 });
-  }
+  const { directive } = await buildDirective(config, fn, event as ChainEventBody, verdict, {
+    txId: payload.tx_id,
+    blockHeight: payload.block_height,
+    deadlineBlock,
+  });
 
-  // 10) commit: dedup + debounce + trigger→session ledger (M4 reads this with readRun(sessionId)).
-  const sessionId = dispatch.sessionId ?? `unknown:${key}`;
-  commitDispatch(key, {
-    sessionId,
-    contractId,
+  // 10) DISPATCH: mark dedup+debounce NOW (so a re-delivery during the minutes-long audit is
+  //     deduped), then fire the audit→adjudicate→notify pipeline ASYNC and return 202. The audit
+  //     target is the decoded proposal principal for governance, else the watched contract.
+  markDispatched(key, contractId, fnName);
+  const target = directive.proposal_target ?? contractId;
+  runTrigger({
+    watchedContractId: contractId,
+    target,
+    tier,
     fn: fnName,
     triggerClass: fn.triggerClass,
-    tier,
+    dedupKey: key,
     txId: payload.tx_id,
     blockHeight: payload.block_height,
     deadlineBlock: directive.deadline_block,
     auditTargets: directive.audit_targets,
     suspicious: verdict.suspicious,
-    dispatchedAt: new Date().toISOString(),
-  });
+  }).catch((err) =>
+    console.error(`[bridge] audit pipeline failed for ${target}: ${(err as Error).message}`),
+  );
+
   markHandled(webhookId);
   console.log(
-    `[bridge] dispatched ${tier} audit for ${contractId}.${fnName} (${directive.audit_targets.length} targets, session ${sessionId})`,
+    `[bridge] dispatched ${tier} audit of ${target} (${directive.audit_targets.length} targets) for ${contractId}.${fnName}`,
   );
   return new Response("queued", { status: 202 });
 }
@@ -250,6 +205,6 @@ if (import.meta.main) {
       req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 }),
   });
   console.log(
-    `secondlayer-webhook bridge listening on :${port} (deep -> ${sessionUrlForTier("deep")})`,
+    `secondlayer-webhook bridge listening on :${port} → audit() pipeline (direct Anthropic)`,
   );
 }
