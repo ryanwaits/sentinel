@@ -14,7 +14,8 @@ import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { type Finding, SentinelFindings } from "../monitoring/adjudication";
 import type { KBRecord } from "../monitoring/kb";
 import type { Tier } from "../monitoring/spend-ceiling";
-import { FINDINGS_SCHEMA } from "./findings";
+import { FINDINGS_SCHEMA, KB_DISTILL_SCHEMA } from "./findings";
+import { type KBCandidate, KBCandidate as KBCandidateSchema } from "./kb-distill";
 import { FETCH_TOOL, POC_TOOL, sentinelServer } from "./tools";
 
 export type Panel = "minimal" | "full";
@@ -87,7 +88,10 @@ ${waivers}
 Focus on re-confirming the known findings + any NEW bugs/regressions outside the accepted assumptions.`;
 }
 
-function orchestratorSystem(panel: Panel, kbContext = ""): string {
+function orchestratorSystem(panel: Panel, kbContext = "", distillKB = false): string {
+  const kbStep = distillKB
+    ? `\n6. ALSO emit "kbCandidate" for KB distillation: classify the contract's archetype (governance-dao | vault | amm | treasury | token | other) and list its sensitive/privileged functions — for each, the name, the closest triggerClass (governance.proposal_submitted | governance.proxy_upgrade | counterparty.new | transfer.outflow), and the authorized callers you can identify from its auth checks (callerAllowlist; [] if open/unclear).`
+    : "";
   const delegate =
     panel === "full"
       ? `Delegate EXACTLY ONCE to each relevant auditor-* subagent (${AUDITOR_DIMS}) - fire them in parallel, ONE Task per dimension. Prioritise auditor-access-control, auditor-governance, auditor-share-accounting for a vault/DAO target.`
@@ -100,13 +104,19 @@ Process (each step ONCE, in order, then stop):
 3. Collect the candidate findings, then verify them in a SINGLE verifier Task call: pass the verifier the FULL contract source AND the complete list of candidate findings at once (NOT one call per finding). It refutes false positives under Clarity semantics - especially internal-vs-live-balance accounting (share price off a data-var, not ft-get-balance, defeats donation/inflation), underflow/overflow ABORT, reverts roll back all state, ft-mint?/ft-burn? of 0 reverts. Mark refuted findings verifierVerdict "refuted" (keep them).
 4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE: pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE - then STOP (never retry, re-verify, or re-delegate).
 5. Return the structured findings object and end your turn. Do not keep working after you have it.
-Label findings honestly: real bug vs centralization/trust.${kbContext}`;
+Label findings honestly: real bug vs centralization/trust.${kbStep}${kbContext}`;
 }
 
-function auditOptions(model: string, panel: Panel, effort: Effort, kbContext: string): Options {
+function auditOptions(
+  model: string,
+  panel: Panel,
+  effort: Effort,
+  kbContext: string,
+  distillKB: boolean,
+): Options {
   return {
     model,
-    systemPrompt: orchestratorSystem(panel, kbContext),
+    systemPrompt: orchestratorSystem(panel, kbContext, distillKB),
     agents: loadSubagents(panel),
     mcpServers: { sentinel: { type: "sdk", name: "sentinel", instance: sentinelServer.instance } },
     allowedTools: [FETCH_TOOL, POC_TOOL, "Task", "Agent"],
@@ -125,7 +135,7 @@ function auditOptions(model: string, panel: Panel, effort: Effort, kbContext: st
     settingSources: [],
     maxTurns: 80,
     effort,
-    outputFormat: { type: "json_schema", schema: FINDINGS_SCHEMA },
+    outputFormat: { type: "json_schema", schema: distillKB ? KB_DISTILL_SCHEMA : FINDINGS_SCHEMA },
   };
 }
 
@@ -149,6 +159,8 @@ export type AuditResult = {
   sessionId?: string;
   status: "success" | "error" | "incomplete";
   findings: Finding[];
+  /** Present when opts.distillKB: the LLM-extracted archetype + sensitive fns for KB distillation. */
+  kbCandidate?: KBCandidate;
   metrics: AuditMetrics;
   /** Raw final text (fallback / debugging). */
   rawResult?: string;
@@ -164,6 +176,8 @@ export async function audit(
     effort?: Effort;
     /** Prior-audit context (the watched contract's KB record) — makes the audit context-aware. */
     kb?: KBRecord | null;
+    /** Baseline mode: also emit a KB candidate (archetype + sensitive fns) for distillation. */
+    distillKB?: boolean;
     onTool?: (name: string, elapsedMs: number) => void;
   } = {},
 ): Promise<AuditResult> {
@@ -172,6 +186,7 @@ export async function audit(
   const panel = opts.panel ?? d.panel;
   const effort = opts.effort ?? d.effort;
   const kbContext = opts.kb ? kbContextBlock(opts.kb) : "";
+  const distillKB = opts.distillKB ?? false;
 
   const prompt = `Audit this deployed Clarity contract for asset-safety bugs: ${contractId}\n\nFetch its source (closure=true), delegate to the auditor subagents, adversarially verify each finding, reproduce confirmed high/critical with the PoC tool, and return the structured findings.`;
 
@@ -182,7 +197,7 @@ export async function audit(
 
   for await (const msg of query({
     prompt,
-    options: auditOptions(model, panel, effort, kbContext),
+    options: auditOptions(model, panel, effort, kbContext, distillKB),
   })) {
     if (msg.type === "assistant") {
       for (const block of (msg.message?.content ?? []) as Array<{ type: string; name?: string }>) {
@@ -215,6 +230,14 @@ export async function audit(
   const parsed = SentinelFindings.safeParse(result.structured_output);
   if (parsed.success) findings = parsed.data.findings;
 
+  let kbCandidate: KBCandidate | undefined;
+  if (distillKB) {
+    const k = KBCandidateSchema.safeParse(
+      (result.structured_output as { kbCandidate?: unknown })?.kbCandidate,
+    );
+    if (k.success) kbCandidate = k.data;
+  }
+
   return {
     contractId,
     model,
@@ -223,6 +246,7 @@ export async function audit(
     sessionId: result.session_id as string | undefined,
     status: result.subtype === "success" ? "success" : "incomplete",
     findings,
+    kbCandidate,
     metrics: {
       wallMs,
       costUsd: (result.total_cost_usd as number) ?? 0,

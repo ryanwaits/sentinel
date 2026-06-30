@@ -7,8 +7,9 @@
   "scripts": {
     "poc:finding-1": "bun run simnet/poc/finding-1.ts",
     "typecheck": "tsc --noEmit",
-    "test": "SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/",
+    "test": "SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/",
     "audit": "bun run engine/run.ts",
+    "distill": "bun run engine/distill.ts",
     "lint": "biome check agent engine monitoring webhooks simnet subgraphs",
     "format": "biome check --write agent engine monitoring webhooks simnet subgraphs",
     "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
