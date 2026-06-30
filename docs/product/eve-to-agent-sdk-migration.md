@@ -80,14 +80,15 @@ reason to leave Vercel, distinct from the gateway. The inbound bridge + outbound
    per-subagent `agent.ts` wrappers (kept `instructions.md`), and `monitoring/{run-reader,watch-run,
    adjudicate-run,m5-demo,eve-jwt}.ts`. Bridge no longer forwards to eve. CLAUDE.md + AGENTS.md
    updated; Node floor → ≥22; zod v4 kept. tsc green, 35 tests pass.
-6. ✅ **SCAFFOLDED — container deploy** (`deploy/`: Dockerfile + docker-compose + `Dockerfile.dockerignore`)
-   + scope doc [phase6-deploy.md](./phase6-deploy.md). Worker = bridge + engine in a long-running
-   container; **Docker-out-of-Docker** (host socket) runs the airgapped PoC sandbox. **#4 baked in:**
-   `run_simnet_poc` gained `pocSource` — author + run a NEW PoC airgapped (mounted at
-   `/app/poc/_dynamic.ts`, deploys the fetched source at runtime), flipping `pocStatus` pending→green
-   for novel findings; the DooD same-path scratch-mount gotcha is handled. Not yet deployed (needs a
-   Docker host + `sandbox:build`); host choice (VM vs Fly/Railway DinD caveats) + job-queue/secrets/
-   multi-tenancy are the open questions in the doc.
+6. ✅ **PROVEN IN-CONTAINER (Tier 1)** — `deploy/` (Dockerfile + docker-compose + RUNBOOK), scoped in
+   [phase6-deploy.md](./phase6-deploy.md). A signed Standard-Webhooks request → the containerized bridge
+   (HMAC-verified; unsigned→401) → a deep audit *inside* the container (KB priorFindings → bug) → DooD
+   green PoC → human-gated WARN ($3.00, 10 findings); state persisted to the `/data` volume. Worker =
+   bridge + engine, long-running; **Docker-out-of-Docker** (host socket) runs the airgapped sandbox.
+   **#4:** `run_simnet_poc` `pocSource` runs a NEW PoC airgapped (mounted at `/app/poc/_dynamic.ts`).
+   Two deploy bugs found + fixed live: `docker-cli` not `docker.io`; `IS_SANDBOX=1` (bypassPermissions →
+   `claude --dangerously-skip-permissions` refuses root). **Remaining for autonomous (Tier 2, user-run):**
+   public tunnel + live secondlayer subscription. Multi-tenant hardening: see ../plans/backend-hardening.md.
 
 ## Open questions
 1. Worker hosting target (Fly / Railway / Render / own VM) for the subprocess-spawning audit worker?
