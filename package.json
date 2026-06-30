@@ -9,11 +9,10 @@
     "typecheck": "tsc --noEmit",
     "test": "SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/",
     "audit": "bun run engine/run.ts",
-    "lint": "biome check agent monitoring webhooks simnet subgraphs",
-    "format": "biome check --write agent monitoring webhooks simnet subgraphs",
+    "lint": "biome check agent engine monitoring webhooks simnet subgraphs",
+    "format": "biome check --write agent engine monitoring webhooks simnet subgraphs",
     "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
     "sandbox:run": "docker run --rm --network none audit-sentinel-simnet:local",
-    "dev": "eve dev",
     "webhook": "bun run webhooks/secondlayer-webhook.ts"
   },
   "dependencies": {
@@ -22,14 +21,10 @@
     "@secondlayer/stacks": "^2.5.2",
     "@secondlayer/subgraphs": "^3.16.0",
     "@stacks/clarinet-sdk": "^3.20.0",
-    "eve": "^0.12.0",
     "zod": "^4.4.3"
   },
-  "overrides": {
-    "ai": "7.0.0-beta.178"
-  },
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",

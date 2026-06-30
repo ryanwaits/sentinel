@@ -16,7 +16,6 @@
  */
 import { z } from "zod";
 import type { KBRecord } from "./kb";
-import type { RunUsage } from "./run-reader";
 import type { TriggerRecord } from "./trigger-state";
 
 export const Severity = z.enum(["critical", "high", "medium", "low", "info"]);
@@ -129,7 +128,7 @@ export function adjudicate(input: {
   sessionId: string;
   contractId: string;
   report: string;
-  usage: Pick<RunUsage, "costUsd">;
+  usage: { costUsd: number };
   waivers?: KBRecord["waivers"];
   trigger?: TriggerRecord | null;
 }): Adjudication {

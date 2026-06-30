@@ -34,23 +34,28 @@ Commit messages extremely concise. **No `Co-Authored-By` trailer.**
   wire-compatible w/ `@secondlayer/stacks` `Cl`.
 
 ## Runtime constraints (don't break — they're load-bearing)
-- **eve 0.12.x** (Vercel durable agent framework). Host: Vercel (schedules→Cron,
-  sandbox→Vercel Sandbox in prod).
-- **Node ≥ 24** (eve hard requirement).
-- **`ai` pinned to `7.0.0-beta.178`** via `package.json` `overrides` (eve 0.12 pins it).
-- **zod v4** (`^4.4.3`). zod v3 crashes eve's schema normalizer
-  (`Cannot read properties of undefined (reading 'input')`). Do not downgrade.
-- Model: `anthropic/claude-opus-4.8` via Vercel AI Gateway. Gateway FREE TIER 403s
-  Opus → needs paid credits to run the agent path. `AI_GATEWAY_API_KEY` in
-  `.env.local` (gitignored).
+- **Engine: `@anthropic-ai/claude-agent-sdk` (`engine/audit.ts`), DIRECT to Anthropic**
+  (`ANTHROPIC_API_KEY`). **eve is GUTTED** (spike showed it never finished a sweep; the
+  Agent SDK does it in minutes — see memory `agent-sdk-vs-eve-spike` + docs/product/
+  eve-to-agent-sdk-migration.md). NO Vercel AI Gateway, NO `ai` override pin.
+- `audit(contractId, {tier})`: tier `monitor`=Sonnet/minimal-panel, `deep`=Opus/full-panel.
+  Subagents reuse `agent/subagents/*/instructions.md`; tools = the in-process Sentinel MCP
+  server (`engine/tools/`: `fetch_contract_source` + `run_simnet_poc`).
+- **Node ≥ 22** (Agent SDK / bun). **zod v4** (`^4.4.3`) — keep.
+- Models: `claude-opus-4-8` / `claude-sonnet-4-6` (Agent SDK aliases `opus`/`sonnet`).
+- **Host (Phase 6, TODO):** the Agent SDK spawns a `claude` CLI subprocess → the audit
+  worker wants a **container** (Fly/Railway/Render), NOT Vercel serverless.
+- The `query()` subprocess inherits env; load `.env.local` (`ANTHROPIC_API_KEY`,
+  `STACKS_NODE_URL`) before running. `AI_GATEWAY_API_KEY` is now UNUSED.
 
 ## Package manager
-No `packageManager` field; npm-style `overrides`/`engines`. Scripts run via **bun**.
+No `packageManager` field; npm-style `engines`. Scripts run via **bun**.
 Before installing a package, check latest: `npm view <pkg> versions`.
 
 ## Sandbox / never-mainnet (guardrails)
-- PoCs run ONLY in the sandbox. `agent/sandbox.ts` = eve `docker()` backend,
-  `networkPolicy: "deny-all"` (zero egress). Image baked by `simnet/Dockerfile`.
+- PoCs run ONLY in the sandbox. `engine/tools/run-simnet-poc.ts` shells
+  `docker run --rm --network none` of the baked image (zero egress) and distinguishes
+  sandbox-unavailable→`pocStatus pending` from PoC-fail→`failed`. Image by `simnet/Dockerfile`.
 - **NEVER run exploits against mainnet.** Audits read-only; reproduction is sandboxed.
 - Responsible/coordinated disclosure; no public PoC before a fix.
 - Label findings honestly: real *bug* vs *centralization/trust* assumption
@@ -60,15 +65,14 @@ Before installing a package, check latest: `npm view <pkg> versions`.
 
 ## Run it
 ```
+. ./.env.local               # load ANTHROPIC_API_KEY + STACKS_NODE_URL first (set -a; . ./.env.local; set +a)
+bun run audit <contractId> <tier>   # engine/run.ts — audit (tier=monitor|deep); prints metrics+findings
 bun run poc:finding-1        # reproduce Finding 1 locally (15/15 assertions)
-bun run sandbox:build        # docker build the airgapped runner image
+bun run sandbox:build        # docker build the airgapped runner image (for run_simnet_poc)
 bun run sandbox:run          # docker run --network none → PoC, no egress
-eve build                    # compile agent (4 tools, 9 subagents, 2 schedules, channel)
-node .output/server/index.mjs   # headless server → POST /eve/v1/session triggers agent
-bun run dev                  # eve TUI (needs interactive terminal; --no-ui buggy in 0.12)
-bun run webhook              # secondlayer→eve HMAC bridge (PORT 3001)
+bun run webhook              # secondlayer→audit() HMAC bridge (PORT 3001); fires runTrigger async
+bun run test                 # bun tests (monitoring/ webhooks/)
 ```
-Headless: use the built server, NOT `eve dev --no-ui` (buggy in 0.12).
 
 ## Proven state
 - Audited `SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.v0-vault-sbtc` (Zest sBTC).
@@ -81,6 +85,7 @@ Headless: use the built server, NOT `eve dev --no-ui` (buggy in 0.12).
 ## Open questions (unresolved — don't silently decide)
 - Monetization priority: retainer vs one-off audit vs salvage.
 - Disclosure stance: pure whitehat vs competitive bounties. MVP repro depth.
-- Add paid AI-Gateway credits to unblock the agent-driven path.
-- Wire `find_value_contracts` to a deployed token-balances subgraph + USD price
-  feed; confirm Vercel concurrency/duration ceilings for ~1M-token sweeps.
+- Phase 6: container host for the audit worker (Agent SDK subprocess) — Fly/Railway/Render.
+- Re-add discovery (`find_value_contracts`, was an eve tool) as an engine MCP tool wired to a
+  token-balances subgraph + USD price feed; same for the `check_clarity_drift` monthly check.
+- Feed KB/waiver context into `engine/audit` for bug-vs-centralization calibration.

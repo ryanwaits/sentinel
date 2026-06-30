@@ -51,29 +51,23 @@ Audit by fanning out to all auditors in parallel, then verify each finding:
 Each auditor returns structured findings (title, severity, location, root cause,
 attacker capability, asset-safety impact, step-by-step repro). Clean dimension → say so.
 
-## Tools
-- `fetch_contract_source` — raw Clarity source via Stacks node RPC
-  (`/v2/contracts/source`). Repoint `STACKS_NODE_URL` at secondlayer in prod.
-- `find_value_contracts` — TVL-ranked audit targets from the `token-balances`
-  subgraph; falls back to audited seed when `SECONDLAYER_API_URL`/`_API_KEY` unset.
-- `run_simnet_poc` — exec a PoC (`poc/*.ts`) in the deny-all docker sandbox; returns
-  `{reproduced, exitCode, summary}`. Safe/unattended; NEVER touches mainnet.
-
-Maintenance tools (drive the monthly-knowledge-refresh schedule, report-only):
-- `check_clarity_drift` — fetch live Clarity docs (functions/keywords/types) + return
-  the baked baseline (`agent/knowledge/clarity-baseline.ts`) to diff for NEW/CHANGED/
-  deprecated built-ins.
-
-Incident-sweep automation is deferred (see docs/backlog.md). Refresh the incident
-corpus on demand with the Claude Code `stacks-hacks-research` workflow.
+## Tools (engine = the in-process Sentinel MCP server, `engine/tools/`)
+The engine runs on `@anthropic-ai/claude-agent-sdk` (eve is gutted — see CLAUDE.md +
+docs/product/eve-to-agent-sdk-migration.md). `audit(contractId, {tier})` (`engine/audit.ts`)
+orchestrates; subagents reuse `agent/subagents/*/instructions.md`; the agent sees `mcp__sentinel__*`.
+- `fetch_contract_source` (`engine/tools/contract-source.ts`) — raw Clarity source (+ optional
+  closure) via Stacks node RPC; wraps `monitoring/contract-source.ts`. `STACKS_NODE_URL` → secondlayer.
+- `run_simnet_poc` (`engine/tools/run-simnet-poc.ts`) — exec a PoC (`poc/*.ts`) in the deny-all
+  docker sandbox; sandbox-unavailable→`pocStatus pending`, fail→`failed`. NEVER touches mainnet.
+- Deferred (were eve tools, removed in the gut): `find_value_contracts` (TVL discovery) and
+  `check_clarity_drift` (knowledge-drift) — re-add as engine MCP tools when wired.
 
 ## Schedule & ingress
-- `agent/schedules/weekly-sweep.ts` — cron `0 9 * * 1` (Mon 09:00 UTC) → Vercel Cron.
-  Runs the full pipeline over top TVL targets.
-- `agent/channels/eve.ts` — default `/eve/v1` HTTP channel, anonymous (`none()`).
-  Tighten auth before prod.
-- `webhooks/secondlayer-webhook.ts` — verifies secondlayer HMAC, forwards to
-  `/eve/v1/session`. Lives OUTSIDE `agent/` so eve doesn't treat it as a channel.
+- **Ingress:** `webhooks/secondlayer-webhook.ts` — secondlayer HMAC bridge. Verifies → pre-filters →
+  reserves spend → fires `monitoring/audit-pipeline.runTrigger()` (= `audit()` → adjudicate → notify)
+  ASYNC and returns 202. No longer forwards to an eve session.
+- **Scheduling (TODO, Phase 6):** the weekly sweep + monthly knowledge-refresh were eve schedules
+  (removed) → re-implement as host cron / Vercel Cron invoking the engine.
 
 ## Hard guardrails
 - NEVER run exploits against mainnet. Reproduction is sandbox-only (deny-all egress).

@@ -75,8 +75,12 @@ reason to leave Vercel, distinct from the gateway. The inbound bridge + outbound
    worker queue) instead of POSTing to eve; keep HMAC verify + spend reserve + dedup/debounce.
 4. **Adjudication off `structured_output`**: feed `result.structured_output` straight into
    `adjudicate()`; delete the `[SENTINEL-FINDINGS]` text-parse + `run-reader`/`watch-run`.
-5. **Remove eve**: dep, build, channels, gateway, pins. Update CLAUDE.md runtime-constraints section.
-6. **Host the worker on a container**; inbound bridge + Cron stay thin.
+5. ✅ **DONE — removed eve**: dropped the `eve` dep + `ai` override pin + `.output`/`.eve`; deleted
+   `agent/agent.ts`, `agent/channels/`, `agent/sandbox.ts`, `agent/tools/`, `agent/schedules/`, the
+   per-subagent `agent.ts` wrappers (kept `instructions.md`), and `monitoring/{run-reader,watch-run,
+   adjudicate-run,m5-demo,eve-jwt}.ts`. Bridge no longer forwards to eve. CLAUDE.md + AGENTS.md
+   updated; Node floor → ≥22; zod v4 kept. tsc green, 35 tests pass.
+6. **Host the worker on a container** (Agent SDK subprocess); inbound bridge + Cron stay thin. (TODO)
 
 ## Open questions
 1. Worker hosting target (Fly / Railway / Render / own VM) for the subprocess-spawning audit worker?
