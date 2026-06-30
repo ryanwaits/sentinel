@@ -68,7 +68,7 @@
 <body>
 <header>
   <h1>Sentinel — <b>audit → monitoring</b> lifecycle</h1>
-  <div class="sub">One <span class="k">audit engine</span> (multi-agent, tiered, ships a green PoC), wrapped by an always-on <span class="m">monitoring</span> trigger layer. The same engine runs <b>pre-launch on demand</b> and <b>post-launch reactively</b> — the difference is the <em>trigger</em> and the <em>KB context</em>. Click a node, or ▶ Play the scenario.</div>
+  <div class="sub">One <span class="k">audit engine</span> (multi-agent, tiered, ships a green PoC), wrapped by an always-on <span class="m">monitoring</span> trigger layer. Post-launch, notable events split two ways: <b>Type 1 — new code</b> (a proposal/upgrade) is <em>audited</em> before it executes; <b>Type 2 — runtime behavior</b> (an outflow) is <em>triaged</em> against what we already know, never re-audited. Click a node, or ▶ Play the scenario.</div>
 </header>
 <div class="wrap">
   <div class="stage">
@@ -131,39 +131,48 @@ const NODES = [
   {id:"benign", lane:2, owner:"drop", title:"Benign → drop (204)", cost:"$0",
    fires:"Not notable → acknowledge and stop. No audit, no spend, no alert. The common case.",
    comp:"— returns 204", pov:"“Quiet by default. Silence here means 'nothing worth your attention'.”"},
-  {id:"fire", lane:2, owner:"mon", title:"Notable → reserve + fire", cost:"$0",
-   fires:"Reserve against the daily <b>spend ceiling</b>, then fire the audit engine — <b>tier-routed</b> (governance → deep/Opus; lesser → monitor/Sonnet) and <b>KB-context-aware</b>.",
-   comp:"spend-ceiling + audit-pipeline.ts", pov:"“A governance proposal gets the full panel; a smaller signal gets the cheap one. Budget is capped either way.”"},
-  {id:"reaudit", lane:2, owner:"audit", title:"Re-audit (KB-informed)", cost:"$0.66–$3",
-   fires:"The <b>same engine</b> as pre-launch — now primed with the KB: it re-validates known <b>priorFindings</b> (won't re-downgrade a known bug), suppresses accepted waivers, and reproduces via PoC.",
-   comp:"engine/audit.ts (kb context)", pov:"“It remembers the exploit I already paid to find — so it confirms + reproduces it in minutes, not re-discovers it cold.”"},
+  {id:"route", lane:2, owner:"mon", title:"Notable → route by type", cost:"$0",
+   fires:"Reserve against the daily <b>spend ceiling</b>, then <b>branch on what the trigger is</b> — new code entering (Type 1) vs runtime behavior on unchanged code (Type 2). Only Type 1 is a code audit.",
+   comp:"spend-ceiling + audit-pipeline.ts", pov:"“'A proposal was submitted' and 'a withdrawal happened' are not the same event — they need different responses.”"},
+  {id:"t1", lane:2, owner:"audit", title:"Type 1 · audit the NEW code", cost:"$0.66–$3",
+   fires:"Governance proposal / upgrade = <b>new code about to execute</b>, inside a timelock. Audit <b>the proposal/impl itself</b> (not the live contract), KB-informed, with a green PoC — racing the deadline so a human can <b>veto before it executes</b>. Prevention.",
+   comp:"engine/audit.ts · target = proposal_target", pov:"“There's new code and a timelock window — audit it now and I can stop it before it ever runs.”"},
+  {id:"t2", lane:2, owner:"mon", title:"Type 2 · incident triage", cost:"~$0",
+   fires:"Outflow / new counterparty = <b>runtime behavior on UNCHANGED code</b> → <b>NOT a re-audit</b>. Correlate the event vs the KB: does it hit a <b>known finding</b> (exploit in progress?), is it <b>anomalous</b> vs baseline, how much is at risk? Mostly deterministic + an optional cheap correlation pass.",
+   comp:"monitoring/triage.ts (planned)", pov:"“The code didn't change — re-auditing tells me nothing new. Tell me whether a risk I already know about is firing right now.”"},
   {id:"adj", lane:2, owner:"mon", title:"Adjudicate", cost:"$0",
-   fires:"Deterministic: drop refuted findings, suppress accepted-waiver matches (warn-once), mark provisional-critical if a PoC is still pending, roll up severity/class from the worst kept finding.",
-   comp:"monitoring/adjudication.ts", pov:"“Turn raw findings into one routable verdict — without another model call I have to trust.”"},
+   fires:"<b>Both</b> Type-1 audit findings and Type-2 triage signals feed in. Deterministic: drop refuted, suppress accepted-waiver matches (warn-once), mark provisional-critical if a PoC is pending, roll up severity/class from the worst kept finding.",
+   comp:"monitoring/adjudication.ts", pov:"“One routable verdict — whether it came from auditing a proposal or triaging a live outflow.”"},
   {id:"warn", lane:2, owner:"human", title:"Human-gated WARN", cost:"—",
-   fires:"A high/critical confirmed <b>bug</b> with a green PoC pages a WARN. <b>Sentinel never auto-discloses</b> — you decide: disclose (coordinated) / escalate / dismiss.",
-   comp:"monitoring/notify.ts", pov:"“I get woken up only for a reproduced, high-severity bug on my live contract — with the PoC attached. Then I choose the move.”"},
+   fires:"<b>Sentinel never auto-acts.</b> Type 1 → 'veto proposal before block N' (PoC attached). Type 2 → 'possible exploitation of Finding X / anomalous outflow to a new counterparty'. You decide: disclose / escalate / veto / dismiss.",
+   comp:"monitoring/notify.ts", pov:"“Either a reproduced bug in incoming code, or a known risk firing on my live contract — with the context to act fast.”"},
 ];
 const EDGES = [
   ["req","engine"],["engine","report"],["report","distill"],["distill","kb"],["kb","prov"],
-  ["prov","event"],["event","filter"],["filter","benign"],["filter","fire"],["fire","reaudit"],
-  ["reaudit","adj"],["adj","warn"],["warn","kb",true] // loop-back: findings refine the KB
+  ["prov","event"],["event","filter"],["filter","benign"],["filter","route"],
+  ["route","t1"],["route","t2"],["t1","adj"],["t2","adj"],["adj","warn"],["warn","kb",true] // loop-back: findings refine the KB
 ];
 // scenario path (Maya) — node id + caption
 const SCENE = [
   ["req","<b>Maya</b> finished her <code>lending-vault.clar</code>. Before mainnet she runs a deep audit — she wants an adversarial pass, not a checklist."],
   ["engine","Sentinel's panel tears into it: eight specialist auditors, then a verifier that <i>tries to disprove</i> every finding."],
   ["report","She gets a short list of <b>real bugs</b> (each with a runnable exploit) separated from <b>trust assumptions</b>. She fixes the bugs and re-runs until clean."],
-  ["distill","The audit is distilled into a KB record — archetype, the value-moving functions, accepted waivers, and the confirmed findings + their PoCs."],
+  ["distill","The audit is distilled into a KB record — archetype, the value-moving functions, accepted waivers, and confirmed findings + their PoCs."],
   ["kb","Maya reviews and promotes it. <b>This is the handoff</b>: her one-time judgment now arms everything that watches this contract."],
   ["prov","One command provisions on-chain subscriptions for the sensitive functions. She deploys. Monitoring is live."],
-  ["event","Weeks later, someone submits a <b>governance proposal</b> that calls a privileged function. secondlayer fires a signed webhook."],
-  ["filter","The pre-filter checks it — governance is always notable, so it passes. (A routine deposit here would've been dropped for $0.)"],
-  ["fire","It's notable: reserve budget, route to <b>deep</b> (governance = full Opus panel), and fire — primed with Maya's KB."],
-  ["reaudit","The same engine re-audits, but it <i>remembers</i> the known socialize-debt bug — it re-confirms and reproduces it with a green PoC in minutes."],
-  ["adj","Adjudication drops noise, keeps the confirmed high-severity bug, and rolls it into one verdict."],
-  ["warn","Maya gets a <b>human-gated WARN</b>: reproduced, high-severity, PoC attached — <i>before</i> the proposal's timelock elapses. She escalates. Sentinel never acted on its own."],
-  ["kb","She tightens the KB from what was learned — sharpening every future check. The loop closes."],
+  ["event","<b>Incident 1.</b> Months later, a <b>governance proposal</b> is submitted that would call a privileged drain function when its timelock elapses. secondlayer fires a signed webhook."],
+  ["filter","Pre-filter: governance is always notable → it passes. (A routine deposit here would've been dropped for $0.)"],
+  ["route","Router: this is <b>Type 1 — new code entering a timelock</b>. There's genuinely new code, and time to act. → audit it."],
+  ["t1","Sentinel audits <b>the proposal itself</b> (not the live vault), primed with the KB. Green PoC in minutes: this proposal <i>will</i> drain the treasury."],
+  ["adj","Confirmed high-severity bug in <i>incoming</i> code → one verdict."],
+  ["warn","<b>WARN: 'veto this proposal before block N'</b> — PoC attached. Maya vetoes. The exploit never executes. <b>Prevention.</b>"],
+  ["event","<b>Incident 2.</b> A year on, a different signal: a <b>large outflow to a brand-new address</b> fires a watched function. The contract's code is unchanged."],
+  ["filter","Pre-filter: the amount is over the outflow threshold → notable, it passes."],
+  ["route","Router: this is <b>Type 2 — runtime behavior on unchanged code</b>. Re-auditing the same bytecode would tell us nothing. → triage, don't audit."],
+  ["t2","Triage correlates the event vs the KB: this outflow path matches the <code>socialize-debt</code> finding, <i>and</i> the counterparty is new. Likely <b>exploitation in progress</b>, value at risk."],
+  ["adj","The triage signal rolls into a verdict — no code audit was needed."],
+  ["warn","<b>WARN: 'possible exploitation of Finding X — anomalous outflow to a new counterparty'</b>. Maya escalates and coordinates an exit. Sentinel still never acted on its own."],
+  ["kb","Each incident sharpens the KB — tighter baselines, confirmed exploit paths. The loop closes."],
 ];
 
 const OWLAB = {you:"You",audit:"Audit engine",mon:"Monitoring",human:"Human gate",drop:"Dropped"};

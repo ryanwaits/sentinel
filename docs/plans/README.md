@@ -5,6 +5,7 @@ speculatively. Ordered by when they unlock, not priority.
 
 | plan | status | trigger to start |
 |---|---|---|
+| [trigger-routing](./trigger-routing.md) | **near-term** | before a real client's contracts generate behavioral traffic — split notable triggers into audit-new-code (Type 1) vs incident-triage (Type 2) |
 | [discovery-find-value-contracts](./discovery-find-value-contracts.md) | blocked | need PROACTIVE target discovery (vs reactive monitoring); requires the asset-holdings subgraph deployed |
 | [clarity-drift-check](./clarity-drift-check.md) | low-value | a Clarity release changes built-ins and we want the panel auto-updated |
 | [backend-hardening](./backend-hardening.md) | premature | deployed AND ≥1 real client, or trigger bursts overwhelm the detached-async bridge |
