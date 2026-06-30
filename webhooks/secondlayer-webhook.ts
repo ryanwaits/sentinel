@@ -18,11 +18,11 @@
  * Env: SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret); ANTHROPIC_API_KEY + STACKS_NODE_URL
  *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
-import { verifyWebhookSignature } from "@secondlayer/sdk";
 import { runTrigger } from "../monitoring/audit-pipeline";
 import { buildDirective, tierFor } from "../monitoring/directive";
 import { deriveConfig } from "../monitoring/kb";
 import { type ChainEventBody, classify } from "../monitoring/prefilter";
+import { verifySignature } from "../monitoring/sources/trigger-source";
 import { reserve } from "../monitoring/spend-ceiling";
 import { getByRuleKey } from "../monitoring/sub-store";
 import { dedupKey, inDebounce, isDuplicate, markDispatched } from "../monitoring/trigger-state";
@@ -74,7 +74,7 @@ export async function handle(req: Request): Promise<Response> {
   // 1) verify (per-ruleKey secret from KV; env fallback for a single-sub setup).
   const ruleKey = ruleKeyFromPath(req.url);
   const secret = getByRuleKey(ruleKey)?.signingSecret ?? FALLBACK_SECRET;
-  if (secret && !verifyWebhookSignature(raw, reqHeaders, secret)) {
+  if (secret && !verifySignature(raw, reqHeaders, secret)) {
     return new Response("bad signature", { status: 401 });
   }
 

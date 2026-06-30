@@ -11,22 +11,30 @@
  * secrets are surfaced ONCE on create, so we persist {subId, secret} to the durable sub-store.
  *
  * ⚠️ create/update/delete hit REAL, BILLABLE infra on the account. Dry-run is the DEFAULT; nothing
- * mutates without `--apply`. CHAIN subs need NO subgraph — the published SDK drives the whole thing.
+ * mutates without `--apply`. CHAIN subs need NO subgraph — the chain-trigger surface drives it all.
+ *
+ * The chain-trigger surface is reached through the `TriggerSource` seam (monitoring/sources/
+ * trigger-source.ts), NOT the secondlayer SDK directly — so "powered-by-secondlayer" here is a
+ * deliberate, swappable choice (a redundant Chainhook source could slot in without touching this).
  *
  * f043 dogfood: this hand-built N-sub reconciler IS the thing watchlist-provisioning (collapse N
- * creates -> 1) would replace; measure the N-sub pain here.
+ * creates -> 1) would replace. The N-sub pain is now MEASURED (not just claimed): every full
+ * `--apply` records {N, create/update/delete, applyLatencyMs} to provision-metrics; `--metrics`
+ * prints the rollup that should drive the f043 go/no-go.
  *
  *   bun run monitoring/provisioner.ts <contractId>                 # dry-run plan (no side effects)
  *   bun run monitoring/provisioner.ts <contractId> --apply         # reconcile all sensitive fns
  *   bun run monitoring/provisioner.ts <contractId> --only execute  # restrict to one fn (MVP)
  *   bun run monitoring/provisioner.ts <contractId> --offboard --apply   # tear down this contract
  *   bun run monitoring/provisioner.ts <contractId> --test execute  # test(id) smoke -> the bridge
+ *   bun run monitoring/provisioner.ts --metrics                    # f043 N-sub-pain rollup
  *
  * Env: SECONDLAYER_API_URL (https://api.secondlayer.tools), SECONDLAYER_API_KEY,
  *      BRIDGE_BASE_URL (public https URL of the bridge — required for create/update).
  */
-import { SecondLayer, trigger } from "@secondlayer/sdk";
 import { deriveConfig } from "./kb";
+import { formatRollup, recordDelivery, recordReconcile } from "./provision-metrics";
+import { defaultTriggerSource, type TriggerSource } from "./sources/trigger-source";
 import {
   deleteRecord,
   getByRuleKey,
@@ -35,14 +43,6 @@ import {
   ruleKeyFor,
   type SubRecord,
 } from "./sub-store";
-
-function makeClient(): SecondLayer {
-  const baseUrl = process.env.SECONDLAYER_API_URL;
-  const apiKey = process.env.SECONDLAYER_API_KEY;
-  if (!baseUrl) throw new Error("SECONDLAYER_API_URL is required");
-  if (!apiKey) throw new Error("SECONDLAYER_API_KEY is required");
-  return new SecondLayer({ baseUrl, apiKey, origin: "session" });
-}
 
 /** One desired subscription, derived from a sensitive fn. */
 type Desired = {
@@ -83,11 +83,11 @@ type Plan = {
 };
 
 /** Build the create/update/delete plan; deletes are scoped to THIS contract's Sentinel subs. */
-async function buildPlan(client: SecondLayer, contractId: string, only?: string): Promise<Plan> {
+async function buildPlan(source: TriggerSource, contractId: string, only?: string): Promise<Plan> {
   const desired = desiredFor(contractId, only);
   const desiredByKey = new Map(desired.map((d) => [d.ruleKey, d]));
 
-  const all = (await client.subscriptions.list()).data;
+  const all = await source.list();
   const ours = all.filter((s) => s.name.startsWith(NAME_PREFIX));
   const remoteByName = new Map(ours.map((s) => [s.name, s]));
   // Only this contract's subs are eligible for deletion (don't touch other clients' subs).
@@ -124,19 +124,17 @@ function printPlan(plan: Plan, apply: boolean): void {
 }
 
 /** Execute a plan against the live account; persists secrets for created subs. */
-async function applyPlan(client: SecondLayer, plan: Plan): Promise<void> {
+async function applyPlan(source: TriggerSource, plan: Plan): Promise<void> {
   for (const d of plan.create) {
-    // Chain subscription: presence of `triggers` (no `subgraphName`) selects chain mode — there is
-    // no `kind` field on CreateSubscriptionRequest in the published SDK.
-    const res = await client.subscriptions.create({
+    const res = await source.create({
       name: d.ruleKey,
       url: d.url,
-      format: "standard-webhooks",
-      triggers: [trigger.contractCall({ contractId: d.contractId, functionName: d.fn })],
+      contractId: d.contractId,
+      functionName: d.fn,
     });
     const rec: SubRecord = {
       ruleKey: d.ruleKey,
-      subId: res.subscription.id,
+      subId: res.subId,
       signingSecret: res.signingSecret,
       contractId: d.contractId,
       fn: d.fn,
@@ -144,25 +142,25 @@ async function applyPlan(client: SecondLayer, plan: Plan): Promise<void> {
       url: d.url,
     };
     putRecord(rec);
-    console.log(`  + created ${d.ruleKey} -> ${res.subscription.id} (secret stored)`);
+    console.log(`  + created ${d.ruleKey} -> ${res.subId} (secret stored)`);
   }
   for (const u of plan.update) {
-    await client.subscriptions.update(u.subId, { url: u.desired.url });
+    await source.updateUrl(u.subId, u.desired.url);
     const existing = getByRuleKey(u.desired.ruleKey);
     if (existing) putRecord({ ...existing, url: u.desired.url });
     console.log(`  ~ updated ${u.desired.ruleKey}`);
   }
   for (const x of plan.delete) {
-    await client.subscriptions.delete(x.subId);
+    await source.remove(x.subId);
     deleteRecord(x.ruleKey);
     console.log(`  - deleted ${x.ruleKey}`);
   }
 }
 
 /** Tear down every Sentinel subscription for a contract + purge its KV records. */
-async function offboard(client: SecondLayer, contractId: string, apply: boolean): Promise<void> {
+async function offboard(source: TriggerSource, contractId: string, apply: boolean): Promise<void> {
   const contractPrefix = `${NAME_PREFIX}${contractId}:`;
-  const all = (await client.subscriptions.list()).data;
+  const all = await source.list();
   const targets = all.filter((s) => s.name.startsWith(contractPrefix));
   console.log(
     `[provisioner:${apply ? "APPLY" : "DRY-RUN"}] offboard ${contractId} — ${targets.length} subscription(s)`,
@@ -170,36 +168,58 @@ async function offboard(client: SecondLayer, contractId: string, apply: boolean)
   for (const s of targets) {
     console.log(`  - delete ${s.name} (${s.id})`);
     if (apply) {
-      await client.subscriptions.delete(s.id);
+      await source.remove(s.id);
       deleteRecord(s.name);
     }
   }
 }
 
-/** test(id) smoke: send a signed test webhook to the bridge for one fn's subscription. */
-async function smokeTest(client: SecondLayer, contractId: string, fn: string): Promise<void> {
+/** test(id) smoke: send a signed test webhook to the bridge; record the delivery-health metric. */
+async function smokeTest(source: TriggerSource, contractId: string, fn: string): Promise<void> {
   const ruleKey = ruleKeyFor(contractId, fn);
   const rec = getByRuleKey(ruleKey);
   if (!rec) throw new Error(`no live subscription for ${ruleKey} — run --apply --only ${fn} first`);
   console.log(`[provisioner] test(${rec.subId}) -> bridge (${rec.url})`);
-  const result = await client.subscriptions.test(rec.subId);
+  const result = await source.test(rec.subId);
   console.log(
     `  test result: ok=${result.ok} status=${result.statusCode} error=${result.error ?? "-"} (${result.durationMs}ms)`,
   );
-  const deliveries = await client.subscriptions.recentDeliveries(rec.subId);
-  for (const d of deliveries.data.slice(0, 3)) {
+  const deliveries = await source.recentDeliveries(rec.subId);
+  for (const d of deliveries.slice(0, 3)) {
     console.log(
       `  delivery ${d.id}: attempt=${d.attempt} status=${d.statusCode} err=${d.errorMessage ?? "-"}`,
     );
   }
+  // rec 5: capture the silent-outage signal — failed/late recent deliveries (null status = no
+  // response = a failure).
+  const recentFailures = deliveries.filter(
+    (d) => d.statusCode == null || d.statusCode < 200 || d.statusCode >= 300,
+  ).length;
+  recordDelivery({
+    ts: new Date().toISOString(),
+    ruleKey,
+    subId: rec.subId,
+    testOk: result.ok,
+    testStatus: result.statusCode,
+    recentFailures,
+    recentTotal: deliveries.length,
+  });
 }
 
 if (import.meta.main) {
   const argv = process.argv.slice(2);
+
+  // --metrics: print the f043 N-sub-pain rollup and exit (no contractId / no account calls).
+  if (argv.includes("--metrics")) {
+    console.log(formatRollup());
+    process.exit(0);
+  }
+
   const contractId = argv.find((a) => !a.startsWith("--"));
   if (!contractId) {
     console.error(
-      "usage: provisioner.ts <contractId> [--apply] [--only <fn>] [--offboard] [--test <fn>]",
+      "usage: provisioner.ts <contractId> [--apply] [--only <fn>] [--offboard] [--test <fn>]\n" +
+        "       provisioner.ts --metrics            # f043 N-sub-pain readout (no account calls)",
     );
     process.exit(1);
   }
@@ -209,16 +229,33 @@ if (import.meta.main) {
   const testIdx = argv.indexOf("--test");
   const testFn = testIdx >= 0 ? argv[testIdx + 1] : undefined;
 
-  const client = makeClient();
+  const source = defaultTriggerSource();
 
   if (testFn) {
-    await smokeTest(client, contractId, testFn);
+    await smokeTest(source, contractId, testFn);
   } else if (argv.includes("--offboard")) {
-    await offboard(client, contractId, apply);
+    await offboard(source, contractId, apply);
   } else {
-    const plan = await buildPlan(client, contractId, only);
+    const plan = await buildPlan(source, contractId, only);
     printPlan(plan, apply);
-    if (apply) await applyPlan(client, plan);
-    else console.log("  (dry-run — re-run with --apply to make these changes)");
+    if (apply) {
+      const t0 = Date.now();
+      await applyPlan(source, plan);
+      // rec 5: record the N-sub-pain signal only on a FULL reconcile (`--only` narrows N, which
+      // would understate the per-contract footprint f043 cares about).
+      if (!only) {
+        recordReconcile({
+          ts: new Date().toISOString(),
+          contractId,
+          n: desiredFor(contractId).length,
+          created: plan.create.length,
+          updated: plan.update.length,
+          deleted: plan.delete.length,
+          applyLatencyMs: Date.now() - t0,
+        });
+      }
+    } else {
+      console.log("  (dry-run — re-run with --apply to make these changes)");
+    }
   }
 }
