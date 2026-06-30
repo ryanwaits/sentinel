@@ -19,7 +19,9 @@
  *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
 import { runTrigger } from "../monitoring/audit-pipeline";
+import { routeForTriggerClass } from "../monitoring/config";
 import { buildDirective, tierFor } from "../monitoring/directive";
+import { triageTrigger } from "../monitoring/incident-triage";
 import { deriveConfig } from "../monitoring/kb";
 import { type ChainEventBody, classify } from "../monitoring/prefilter";
 import { verifySignature } from "../monitoring/sources/trigger-source";
@@ -28,8 +30,6 @@ import { getByRuleKey } from "../monitoring/sub-store";
 import { dedupKey, inDebounce, isDuplicate, markDispatched } from "../monitoring/trigger-state";
 
 const FALLBACK_SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
-
-const GOVERNANCE_CLASSES = ["governance.proposal_submitted", "governance.proxy_upgrade"];
 
 /** Representative governance timelock window (blocks) for the deadline watchdog. ~1 day at ~10min/block. */
 const TIMELOCK_BLOCKS = Number(process.env.SENTINEL_TIMELOCK_BLOCKS ?? 144);
@@ -66,6 +66,76 @@ function ruleKeyFromPath(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ""));
 }
 
+/** A transfer-trigger event (ft/stx outflow sub) carries no function_name; the watched contract is
+ *  the SENDER (we scope subs to sender=contract). Discriminate on the event type. */
+function isTransferEvent(event: ChainEventBody): boolean {
+  return event.type === "ft_transfer" || event.type === "stx_transfer";
+}
+
+/**
+ * Type-2 TRANSFER (outflow) path: the watched contract is `event.sender`; match the watched
+ * transfer.outflow fn by asset; pre-filter; on a notable event run INCIDENT TRIAGE (no audit, no
+ * reserve — the code is unchanged, nothing to re-audit). Detection, not prevention.
+ */
+async function handleTransfer(
+  payload: ChainWebhook,
+  event: ChainEventBody,
+  webhookId: string | undefined,
+): Promise<Response> {
+  const contractId = event.sender;
+  if (!contractId) {
+    markHandled(webhookId);
+    return new Response("transfer event without sender — no-op", { status: 200 });
+  }
+  let config: ReturnType<typeof deriveConfig>;
+  try {
+    config = deriveConfig(contractId);
+  } catch {
+    markHandled(webhookId);
+    return new Response("unmonitored contract", { status: 204 });
+  }
+  const asset = event.asset_identifier ?? "stx";
+  const fn =
+    config.sensitiveFns.find(
+      (f) =>
+        f.triggerClass === "transfer.outflow" &&
+        (f.outflowThreshold?.asset === asset || f.suggestedOutflowThreshold?.asset === asset),
+    ) ?? config.sensitiveFns.find((f) => f.triggerClass === "transfer.outflow");
+  if (!fn) {
+    markHandled(webhookId);
+    return new Response("no outflow watch for this asset", { status: 204 });
+  }
+  const fnLabel = `outflow:${asset}`;
+  const key = dedupKey(payload.tx_id, contractId, fnLabel);
+  if (isDuplicate(key)) {
+    markHandled(webhookId);
+    return new Response("duplicate event", { status: 200 });
+  }
+  const verdict = classify(fn, event);
+  if (!verdict.notable) {
+    console.log(`[bridge] benign outflow ${contractId} (${asset}): ${verdict.reason} — no spend`);
+    markHandled(webhookId);
+    return new Response(`benign: ${verdict.reason}`, { status: 204 });
+  }
+  markDispatched(key, contractId, fnLabel);
+  triageTrigger({
+    config,
+    contractId,
+    fnLabel,
+    triggerClass: "transfer.outflow",
+    event,
+    verdict,
+    txId: payload.tx_id,
+    blockHeight: payload.block_height,
+    dedupKey: key,
+  }).catch((err) =>
+    console.error(`[bridge] triage failed for ${contractId}: ${(err as Error).message}`),
+  );
+  markHandled(webhookId);
+  console.log(`[bridge] triage queued: ${contractId} ${fnLabel} (${verdict.reason})`);
+  return new Response("triage queued", { status: 202 });
+}
+
 export async function handle(req: Request): Promise<Response> {
   const raw = await req.text();
   const reqHeaders = Object.fromEntries(req.headers);
@@ -94,7 +164,14 @@ export async function handle(req: Request): Promise<Response> {
   }
 
   const event = payload.event;
-  const contractId = event?.contract_id ?? event?.asset_identifier?.split("::")[0];
+
+  // Type-2 TRANSFER (outflow) event — no function_name; the watched contract is the sender. Route to
+  // incident triage (detection), never a re-audit.
+  if (event && isTransferEvent(event)) {
+    return handleTransfer(payload, event, webhookId);
+  }
+
+  const contractId = event?.contract_id;
   const fnName = event?.function_name;
   if (!contractId || !fnName) {
     markHandled(webhookId);
@@ -131,9 +208,30 @@ export async function handle(req: Request): Promise<Response> {
     return new Response(`benign: ${verdict.reason}`, { status: 204 });
   }
 
+  // 6b) Type-2 on a contract_call sub (counterparty.new) — runtime behavior, no new code → TRIAGE,
+  //     never re-audit. No reserve (triage is deterministic, ~$0). Only Type-1 proceeds to the audit.
+  if (routeForTriggerClass(fn.triggerClass) === "type2") {
+    markDispatched(key, contractId, fnName);
+    triageTrigger({
+      config,
+      contractId,
+      fnLabel: fnName,
+      triggerClass: fn.triggerClass,
+      event: event as ChainEventBody,
+      verdict,
+      txId: payload.tx_id,
+      blockHeight: payload.block_height,
+      dedupKey: key,
+    }).catch((err) =>
+      console.error(`[bridge] triage failed for ${contractId}: ${(err as Error).message}`),
+    );
+    markHandled(webhookId);
+    return new Response("triage queued", { status: 202 });
+  }
+
   // 7) debounce floody classes (governance is exempt — every distinct proposal must be audited;
   //    dedup already blocks exact refire, the spend ceiling is the ultimate cap).
-  if (!GOVERNANCE_CLASSES.includes(fn.triggerClass)) {
+  if (routeForTriggerClass(fn.triggerClass) !== "type1") {
     const deb = inDebounce(contractId, fnName);
     if (deb.blocked) {
       console.log(
@@ -159,7 +257,7 @@ export async function handle(req: Request): Promise<Response> {
   //    verdict before the slow PoC. SENTINEL_TIMELOCK_BLOCKS is the representative window (real
   //    per-DAO timelock read is a later refinement).
   const deadlineBlock =
-    GOVERNANCE_CLASSES.includes(fn.triggerClass) && payload.block_height
+    routeForTriggerClass(fn.triggerClass) === "type1" && payload.block_height
       ? payload.block_height + TIMELOCK_BLOCKS
       : null;
   const { directive } = await buildDirective(config, fn, event as ChainEventBody, verdict, {

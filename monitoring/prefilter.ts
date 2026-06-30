@@ -34,7 +34,12 @@ export type ChainEventBody = {
   sender?: string;
   status?: string;
   result_hex?: string;
+  /** Asset-transfer event fields (ft_transfer/stx_transfer subs): the asset + amount + recipient
+   *  carried DIRECTLY (no function_args to decode). `sender` = the watched contract (we scope
+   *  sender=contract), so an outflow event has the amount/asset at the top level. */
   asset_identifier?: string;
+  amount?: string;
+  recipient?: string;
 };
 
 // A fully-qualified contract principal `SP….name` (the shape a decoded proposal/extension arg takes).
@@ -69,6 +74,12 @@ export function firstUint(decoded: string[]): bigint | null {
   return null;
 }
 
+/** The amount carried directly on a transfer event (`event.amount`), or null if absent/malformed. */
+export function transferAmount(event: ChainEventBody): bigint | null {
+  if (event.amount == null || !/^\d+$/.test(event.amount)) return null;
+  return BigInt(event.amount);
+}
+
 export type PrefilterVerdict = {
   /** True ⇒ worth a (budgeted) audit; false ⇒ benign, log + 204, no spend. */
   notable: boolean;
@@ -99,7 +110,9 @@ export function classify(fn: SensitiveFn, event: ChainEventBody): PrefilterVerdi
       };
     }
     case "transfer.outflow": {
-      const amount = firstUint(decoded);
+      // Transfer-event subs carry the amount directly (event.amount); contract_call subs carry it in
+      // function_args (firstUint). Prefer the direct field.
+      const amount = transferAmount(event) ?? firstUint(decoded);
       const threshold = fn.outflowThreshold ? BigInt(fn.outflowThreshold.amount) : null;
       if (threshold !== null && amount !== null) {
         const notable = amount >= threshold;

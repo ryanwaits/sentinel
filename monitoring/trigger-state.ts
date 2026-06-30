@@ -38,6 +38,10 @@ export type TriggerRecord = {
   auditTargets: string[];
   suspicious: boolean;
   dispatchedAt: string;
+  /** "type1" (audit new code) vs "type2" (incident triage). Forensics; absent ⇒ legacy audit dispatch. */
+  route?: "type1" | "type2";
+  /** Which Type-2 triage producers fired (signature titles / "verdict-passthrough"). */
+  signals?: string[];
 };
 
 type State = {

@@ -73,4 +73,41 @@ describe("bridge no-dispatch branches", () => {
     );
     expect(res.status).toBe(204);
   });
+
+  // Type-2: a TRANSFER event (no function_name; sender = the watched contract) routes to incident
+  // triage, gated by the same outflow threshold. ccd002 withdraw-stx threshold = 1e12.
+  test("Type-2 stx outflow over threshold → 202 (triage queued, no audit)", async () => {
+    const res = await handle(
+      post(
+        {
+          action: "apply",
+          tx_id: "0xout",
+          block_height: 20,
+          event: {
+            type: "stx_transfer",
+            sender: TREASURY,
+            amount: "5000000000000",
+            recipient: DAO,
+          },
+        },
+        { "webhook-id": "wh-outflow" },
+      ),
+    );
+    expect(res.status).toBe(202);
+  });
+
+  test("Type-2 stx outflow below threshold → 204 (benign, no spend)", async () => {
+    const res = await handle(
+      post(
+        {
+          action: "apply",
+          tx_id: "0xsmall",
+          block_height: 21,
+          event: { type: "stx_transfer", sender: TREASURY, amount: "1", recipient: DAO },
+        },
+        { "webhook-id": "wh-small" },
+      ),
+    );
+    expect(res.status).toBe(204);
+  });
 });
