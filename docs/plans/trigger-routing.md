@@ -1,11 +1,16 @@
 # Plan — trigger routing: audit-new-code (Type 1) vs incident-triage (Type 2)
 
-**Status:** in progress. MVP-PRODUCER done (commit 94f2dc4 — audit generates the scope). The
-transfer-subscription provisioning seam done (commit 76842de — `trigger.ftTransfer`/`stxTransfer` via
-`trigger-source`/`provisioner`; outflow subs scoped sender=contract, per contract+asset). REMAINING for
-the live loop (#2 / MVP-CONSUMER): the bridge parsing transfer-event payloads + `monitoring/incident-triage.ts`
-(deterministic correlation) + the Type-2 webhook fork. Near-term correctness fix — re-auditing unchanged
-live code on a behavioral event is the bug this closes.
+**Status:** CODE COMPLETE (MVP). Done: PRODUCER (94f2dc4 — audit generates the scope), transfer-sub
+provisioning (76842de — `trigger.ftTransfer`/`stxTransfer`), and CONSUMER (9ee7547 —
+`monitoring/incident-triage.ts` deterministic correlation + the bridge transfer-event branch +
+counterparty.new Type-2 fork; Type-1 audit path unchanged). The "re-audit unchanged live code on a
+behavioral event" bug is closed: behavioral triggers now triage, never re-audit.
+
+REMAINING (not MVP code): (1) verify the exact secondlayer transfer **webhook payload field-names** on the
+first real ft/stx_transfer delivery (the triage logic + bridge mapping are built/tested to the documented
+shape — `{type, sender, asset_identifier?, amount, recipient}`); (2) threshold TUNING needs a real flow
+profile (untuned → fail-safe-triaged); (3) FOLLOW-ONs: agent correlation pass, learned behavioral baseline,
+confidence-gated alertLevel, deterministic precondition matching (see audit-informed-monitoring.md).
 
 ## Problem
 `monitoring/audit-pipeline.ts` `runTrigger` sends **every** notable trigger to `audit()` — the full
