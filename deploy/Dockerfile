@@ -6,9 +6,10 @@
 # Prereq on the host: build the sandbox image once → `bun run sandbox:build` (audit-sentinel-simnet:local).
 FROM oven/bun:1
 
-# docker CLI only (the daemon is the HOST's, via the mounted socket); node for the Agent SDK subprocess.
+# docker CLIENT only (docker-cli, NOT docker.io — that's the daemon; ours is the HOST's via the mounted
+# socket) + node for the Agent SDK subprocess. docker-cli provides /usr/bin/docker.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends docker.io nodejs ca-certificates \
+ && apt-get install -y --no-install-recommends docker-cli nodejs ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
