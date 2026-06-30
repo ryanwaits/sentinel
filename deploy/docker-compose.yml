@@ -1,0 +1,36 @@
+# Sentinel audit worker — reference container deploy (Phase 6).
+#
+# Prereqs on the host:
+#   1. bun run sandbox:build          # build audit-sentinel-simnet:local (the airgapped PoC image)
+#   2. .env.local present with ANTHROPIC_API_KEY, STACKS_NODE_URL, SECONDLAYER_* (and SENTINEL_* opts)
+#   3. mkdir -p /tmp/sentinel-sandbox  # the DooD scratch dir (see below)
+#   docker compose -f deploy/docker-compose.yml up --build
+#
+# Then expose :3001 publicly (LB / reverse proxy / tunnel) so secondlayer can deliver webhooks.
+services:
+  sentinel-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "3001:3001"
+    env_file:
+      - ../.env.local
+    environment:
+      - SENTINEL_SINK_DIR=/data/.sentinel
+      # DooD: inline-PoC source is written here and bind-mounted into the sandbox container. Because
+      # bind mounts resolve on the HOST daemon, this path MUST be identical on host and in the worker
+      # (see the volumes mount below) — otherwise the host can't find the file.
+      - SENTINEL_SANDBOX_HOSTDIR=/tmp/sentinel-sandbox
+    volumes:
+      # Docker-out-of-Docker: run the airgapped `docker run --network none` PoC sandbox on the host daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Durable monitoring state (sub secrets, spend ceiling, trigger ledger, notifications). External
+      # KV is the prod upgrade (docs/product/backend-architecture.md); a volume is the MVP.
+      - sentinel-data:/data
+      # Same-path bind mount so inline-PoC files the worker writes are visible to the host daemon.
+      - /tmp/sentinel-sandbox:/tmp/sentinel-sandbox
+    restart: unless-stopped
+
+volumes:
+  sentinel-data:

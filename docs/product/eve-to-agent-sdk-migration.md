@@ -80,7 +80,14 @@ reason to leave Vercel, distinct from the gateway. The inbound bridge + outbound
    per-subagent `agent.ts` wrappers (kept `instructions.md`), and `monitoring/{run-reader,watch-run,
    adjudicate-run,m5-demo,eve-jwt}.ts`. Bridge no longer forwards to eve. CLAUDE.md + AGENTS.md
    updated; Node floor → ≥22; zod v4 kept. tsc green, 35 tests pass.
-6. **Host the worker on a container** (Agent SDK subprocess); inbound bridge + Cron stay thin. (TODO)
+6. ✅ **SCAFFOLDED — container deploy** (`deploy/`: Dockerfile + docker-compose + `Dockerfile.dockerignore`)
+   + scope doc [phase6-deploy.md](./phase6-deploy.md). Worker = bridge + engine in a long-running
+   container; **Docker-out-of-Docker** (host socket) runs the airgapped PoC sandbox. **#4 baked in:**
+   `run_simnet_poc` gained `pocSource` — author + run a NEW PoC airgapped (mounted at
+   `/app/poc/_dynamic.ts`, deploys the fetched source at runtime), flipping `pocStatus` pending→green
+   for novel findings; the DooD same-path scratch-mount gotcha is handled. Not yet deployed (needs a
+   Docker host + `sandbox:build`); host choice (VM vs Fly/Railway DinD caveats) + job-queue/secrets/
+   multi-tenancy are the open questions in the doc.
 
 ## Open questions
 1. Worker hosting target (Fly / Railway / Render / own VM) for the subprocess-spawning audit worker?

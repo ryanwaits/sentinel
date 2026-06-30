@@ -1,0 +1,9 @@
+node_modules
+.git
+.sentinel
+.output
+.eve
+.env.local
+docs
+reports
+**/*.test.ts

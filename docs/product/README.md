@@ -14,6 +14,9 @@ audited the real Zest vault in 8.4min/$0.95 with native observability + structur
 never finished. This reframes Phase 2 (the durable-run-store workaround disappears) and pushes the
 audit worker onto a container (the SDK spawns a subprocess — the real reason to leave Vercel).
 
+Deploy: [phase6-deploy.md](./phase6-deploy.md) — container host for the audit worker (Docker-out-of-Docker
+for the airgapped PoC sandbox); scaffolded in `deploy/`.
+
 ## The three plans
 | Doc | What it scopes | Key decision |
 |---|---|---|
