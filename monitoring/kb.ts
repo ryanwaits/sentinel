@@ -10,7 +10,7 @@
  * filter can't express); MVP captures the static facts: archetype, call-graph closure, sensitive
  * fns, and accepted centralization waivers (warn once, don't re-page).
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { Archetype, MonitoringConfig, SensitiveFn, tierForArchetype } from "./config";
@@ -24,6 +24,17 @@ export const CentralizationWaiver = z.object({
   note: z.string().optional(),
 });
 
+/** A confirmed finding from a prior audit — carried forward so the next audit re-validates (and
+ *  reproduces) it instead of re-deriving its severity/class from scratch (the calibration anchor). */
+export const PriorFinding = z.object({
+  title: z.string(),
+  severity: z.enum(["critical", "high", "medium", "low", "info"]).default("high"),
+  class: z.enum(["bug", "centralization", "info"]).default("bug"),
+  note: z.string().optional(),
+  /** A baked PoC that reproduces it (e.g. "poc/finding-1.ts") — the engine re-runs it for a green PoC. */
+  pocFile: z.string().optional(),
+});
+
 /** What an audit recorded about one contract. Source of truth for `deriveConfig`. */
 export const KBRecord = z.object({
   contractId: z.string(),
@@ -35,6 +46,8 @@ export const KBRecord = z.object({
   auditedAt: z.string().optional(),
   sensitiveFns: z.array(SensitiveFn).default([]),
   waivers: z.array(CentralizationWaiver).default([]),
+  /** Confirmed findings from a prior audit — re-validate + reproduce (calibration anchor). */
+  priorFindings: z.array(PriorFinding).default([]),
   /** Provenance — the report this record was distilled from. */
   source: z.string().optional(),
 });
@@ -97,6 +110,12 @@ if (import.meta.main) {
   if (id) {
     console.log(JSON.stringify(deriveConfig(id), null, 2));
   } else {
-    console.log(JSON.stringify(listRecords().map((r) => ({ contractId: r.contractId, archetype: r.archetype })), null, 2));
+    console.log(
+      JSON.stringify(
+        listRecords().map((r) => ({ contractId: r.contractId, archetype: r.archetype })),
+        null,
+        2,
+      ),
+    );
   }
 }

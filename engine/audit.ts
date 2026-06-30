@@ -64,15 +64,27 @@ function kbContextBlock(kb: KBRecord): string {
         .map((w) => `  - ${w.finding} [${w.label}]${w.note ? ` — ${w.note}` : ""}`)
         .join("\n")
     : "  (none)";
+  const prior = kb.priorFindings.length
+    ? kb.priorFindings
+        .map(
+          (p) =>
+            `  - ${p.title} [${p.severity}/${p.class}]${p.note ? ` — ${p.note}` : ""}${p.pocFile ? ` (reproduce with run_simnet_poc pocFile="${p.pocFile}")` : ""}`,
+        )
+        .join("\n")
+    : "  (none)";
   return `
 
 ## Prior audit context (KB) for ${kb.contractId} — baseline-audited as a "${kb.archetype}"
 Known sensitive functions: ${fns}.
+KNOWN CONFIRMED FINDINGS from the prior audit — RE-VALIDATE each against the current source; unless the
+code changed, treat it as a REAL finding at the stated severity/class (don't silently re-downgrade a
+known bug to "centralization"). For each you re-confirm at high/critical, REPRODUCE it with run_simnet_poc:
+${prior}
 ACCEPTED centralization/trust waivers (already reviewed and accepted — do NOT re-report these as new
 critical bugs; if you encounter one, label class "centralization"/"info" and note it is a known
 accepted assumption, not a novel finding):
 ${waivers}
-Focus on NEW bugs, regressions, or anything OUTSIDE these accepted assumptions.`;
+Focus on re-confirming the known findings + any NEW bugs/regressions outside the accepted assumptions.`;
 }
 
 function orchestratorSystem(panel: Panel, kbContext = ""): string {
