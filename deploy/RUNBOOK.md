@@ -11,7 +11,7 @@ specific: a public ingress and a live secondlayer subscription.
 - A Docker host you control (VM / bare host) — needs host-socket access for DooD (see phase6-deploy.md
   for the Fly/Railway caveats). Apple-Silicon dev: OrbStack works.
 - `.env.local` present at repo root with: `ANTHROPIC_API_KEY`, `STACKS_NODE_URL` (→ secondlayer),
-  `SECONDLAYER_API_KEY`/`SECONDLAYER_API_URL`, and **`SENTINEL_WEBHOOK_SECRET`** (see §3 — mandatory).
+  `SECONDLAYER_API_KEY`/`SECONDLAYER_API_URL`, and **`SECONDLAYER_WEBHOOK_SECRET`** (see §3 — mandatory).
 - Build the airgapped sandbox image once: `bun run sandbox:build` → `audit-sentinel-simnet:local`.
 - `mkdir -p /tmp/sentinel-sandbox` (the DooD same-path scratch dir; matches `SENTINEL_SANDBOX_HOSTDIR`).
 
@@ -37,7 +37,7 @@ secondlayer must reach the bridge. Expose :3001 via a tunnel or your LB:
 The bridge verifies the Standard-Webhooks HMAC with a per-ruleKey secret (KV) or an env fallback.
 **If NO secret resolves, verification is SKIPPED (fail-open) — any caller can trigger an audit.** Always
 configure one in prod:
-- Single-sub: set `SENTINEL_WEBHOOK_SECRET` (env fallback) to the subscription's signing secret.
+- Single-sub: set `SECONDLAYER_WEBHOOK_SECRET` (env fallback) to the subscription's signing secret.
 - Multi-sub: store per-ruleKey secrets in the KV the bridge reads (the `/webhook/<ruleKey>` path).
 
 Verify the gate: an unsigned `POST <PUBLIC>/webhook/<ruleKey>` must return **401**.

@@ -18,6 +18,14 @@ services:
       - ../.env.local
     environment:
       - SENTINEL_SINK_DIR=/data/.sentinel
+      # The Agent SDK's bypassPermissions → `claude --dangerously-skip-permissions`, which REFUSES to
+      # run as root. The worker runs as root (so the mounted docker socket / DooD just works), so opt
+      # into the sandbox escape-hatch. Safe here: trusted single-purpose worker; PoCs stay airgapped
+      # (--network none). Revisit (non-root user + socket gid) for hardened multi-tenant.
+      - IS_SANDBOX=1
+      # Webhook HMAC secret (Standard Webhooks fallback for a single-sub setup). Passed from the host
+      # env, NOT committed. MANDATORY in prod — without it the bridge fail-opens (skips verification).
+      - SECONDLAYER_WEBHOOK_SECRET=${SECONDLAYER_WEBHOOK_SECRET:-}
       # DooD: inline-PoC source is written here and bind-mounted into the sandbox container. Because
       # bind mounts resolve on the HOST daemon, this path MUST be identical on host and in the worker
       # (see the volumes mount below) — otherwise the host can't find the file.
