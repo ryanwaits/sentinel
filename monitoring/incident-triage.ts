@@ -34,6 +34,8 @@ function eventAsset(event: ChainEventBody): string | undefined {
   return undefined;
 }
 
+const safeBig = (s: string): bigint | null => (/^\d+$/.test(s) ? BigInt(s) : null);
+
 /**
  * Deterministic triage → Finding[]. Two producers:
  *  1. signature-match — a CONFIRMED-bug signature is implicated (its fn was called OR its asset left
@@ -73,18 +75,50 @@ export function triageFindings(ctx: TriageContext): Finding[] {
     });
   }
 
-  // Always emit the generic signal (every event reaching triage is notable). class:"info".
+  // Baseline-aware generic signal (always emitted; every event here is notable). If a learned baseline
+  // exists for the asset, ESCALATE when the outflow is anomalous — above the historical max, > 2× p99,
+  // or to a brand-new recipient (the "big and weird" vs "big but normal" distinction). Else a plain
+  // medium signal (→ INFO). class:"info" so a generic outflow never implies a proven bug.
+  const bl = asset != null ? config.outflowBaselines.find((b) => b.asset === asset) : undefined;
+  let severity: Finding["severity"] = verdict.suspicious ? "high" : "medium";
+  let confidence = 0.4;
+  let anomaly = "";
+  if (bl && verdict.amount != null) {
+    const p99 = safeBig(bl.p99);
+    const max = safeBig(bl.max);
+    const newRecipient =
+      event.recipient != null &&
+      bl.recipients.length > 0 &&
+      !bl.recipients.includes(event.recipient);
+    if (max != null && verdict.amount > max) {
+      severity = "high";
+      confidence = 0.55;
+      anomaly = ` ANOMALY: ${verdict.amount} exceeds the historical max (${bl.max}) over ${bl.count} outflows.`;
+    } else if (p99 != null && p99 > 0n && verdict.amount > p99 * 2n) {
+      severity = "high";
+      confidence = 0.5;
+      anomaly = ` ANOMALY: ${verdict.amount} is >2× the p99 baseline (${bl.p99}).`;
+    } else if (newRecipient) {
+      severity = "high";
+      confidence = 0.5;
+      anomaly = ` ANOMALY: recipient ${event.recipient} is not among the ${bl.recipients.length} known counterparties.`;
+    } else {
+      anomaly = ` (within baseline: <= p99 ${bl.p99}, known recipient).`;
+    }
+  }
   out.push({
     title: `Notable ${triggerClass} event on ${ctx.contractId}`,
-    severity: verdict.suspicious ? "high" : "medium",
+    severity,
     class: "info",
     verifierVerdict: "uncertain",
     pocStatus: "na",
-    confidence: 0.4,
+    confidence,
     origin: "incident",
     blastRadius:
-      verdict.amount != null ? `amount ${verdict.amount}${asset ? ` ${asset}` : ""}` : undefined,
-    recommendedAction: `${verdict.reason}. Runtime detection (already on-chain) — human-gated incident review; no automated action taken.`,
+      verdict.amount != null
+        ? `amount ${verdict.amount}${asset ? ` ${asset}` : ""}${event.recipient ? ` -> ${event.recipient}` : ""}`
+        : undefined,
+    recommendedAction: `${verdict.reason}.${anomaly} Runtime detection (already on-chain) — human-gated incident review; no automated action taken.`,
   });
 
   return out;

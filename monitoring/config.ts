@@ -39,6 +39,20 @@ export const OutflowThreshold = z.object({
 });
 export type OutflowThreshold = z.infer<typeof OutflowThreshold>;
 
+/** Reference outflow distribution for one asset, computed from the Index (`bun run baseline`). Advisory
+ *  REFERENCE data — drives Type-2 anomaly SEVERITY (amount ≫ p99, or a brand-new recipient), NEVER the
+ *  live prefilter gate (that stays the human-promoted `outflowThreshold`). */
+export const OutflowBaseline = z.object({
+  asset: z.string(),
+  count: z.number(),
+  p99: z.string(),
+  max: z.string(),
+  /** Known counterparties (capped) — a recipient outside this set is a new-counterparty anomaly. */
+  recipients: z.array(z.string()).default([]),
+  computedAt: z.string().optional(),
+});
+export type OutflowBaseline = z.infer<typeof OutflowBaseline>;
+
 /** An accepted centralization/trust finding — surfaced once, then suppressed (not a re-pageable bug).
  *  Lives HERE (not kb.ts) so kb.ts imports it FROM config — the existing safe import direction. */
 export const CentralizationWaiver = z.object({
@@ -87,6 +101,8 @@ export const MonitoringConfig = z.object({
   sensitiveFns: z.array(SensitiveFn),
   /** Type-2 detection signatures (confirmed audit findings → known-finding-match). */
   signatures: z.array(FindingSignature).default([]),
+  /** Per-asset outflow baselines (Index-derived) → Type-2 anomaly severity. */
+  outflowBaselines: z.array(OutflowBaseline).default([]),
   /** Accepted centralization waivers (warn-once suppression set). */
   waivers: z.array(CentralizationWaiver).default([]),
   /** Contracts to fetch alongside the target on a trigger (static call-graph closure seed). */

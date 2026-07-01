@@ -21,6 +21,7 @@ const treasuryConfig: MonitoringConfig = {
   tier: "deep",
   sensitiveFns: [],
   signatures: [],
+  outflowBaselines: [],
   waivers: [],
   closure: [DAO],
   route: "default",

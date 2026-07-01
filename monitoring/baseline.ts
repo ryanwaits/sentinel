@@ -10,8 +10,13 @@
  *   . ./.env.local && bun run baseline <contractId> [limit]
  */
 import { SecondLayer } from "@secondlayer/sdk";
+import type { OutflowBaseline } from "./config";
+import { loadRecord, saveRecord } from "./kb";
 
 export type OutflowSample = { asset: string; amount: bigint; recipient?: string };
+
+/** Cap the stored known-recipient set (they're public addresses; bound the KB record size). */
+const RECIPIENT_CAP = 100;
 
 export type AssetBaseline = {
   asset: string;
@@ -21,6 +26,8 @@ export type AssetBaseline = {
   p99: string;
   max: string;
   distinctRecipients: number;
+  /** Known counterparties (capped) — a recipient outside this set is a new-counterparty anomaly. */
+  recipients: string[];
   /** Suggested absolute threshold (p99) — advisory; a human promotes it into outflowThreshold. */
   suggestedAmount: string;
 };
@@ -69,7 +76,7 @@ export function computeBaseline(samples: OutflowSample[]): AssetBaseline[] {
   const out: AssetBaseline[] = [];
   for (const [asset, list] of byAsset) {
     const sorted = list.map((s) => s.amount).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const recipients = new Set(list.map((s) => s.recipient).filter(Boolean));
+    const recipients = [...new Set(list.map((s) => s.recipient).filter((r): r is string => !!r))];
     const p99 = percentile(sorted, 99).toString();
     out.push({
       asset,
@@ -78,19 +85,35 @@ export function computeBaseline(samples: OutflowSample[]): AssetBaseline[] {
       p95: percentile(sorted, 95).toString(),
       p99,
       max: (sorted[sorted.length - 1] ?? 0n).toString(),
-      distinctRecipients: recipients.size,
+      distinctRecipients: recipients.length,
+      recipients: recipients.slice(0, RECIPIENT_CAP),
       suggestedAmount: p99,
     });
   }
   return out.sort((a, b) => b.count - a.count);
 }
 
-// CLI: query the Index + print suggested thresholds (advisory — human promotes into sentinel/kb/).
+/** Stored form for the KB (reference data → Type-2 anomaly severity; NOT the live gate). */
+export function toOutflowBaseline(b: AssetBaseline, computedAt: string): OutflowBaseline {
+  return {
+    asset: b.asset,
+    count: b.count,
+    p99: b.p99,
+    max: b.max,
+    recipients: b.recipients,
+    computedAt,
+  };
+}
+
+// CLI: query the Index + print suggested thresholds. `--write` persists the baselines into the KB
+// record (reference data for anomaly detection); the LIVE outflowThreshold still needs human promotion.
 if (import.meta.main) {
-  const contractId = process.argv[2];
-  const limit = Number(process.argv[3] ?? 500);
+  const args = process.argv.slice(2);
+  const contractId = args.find((a) => !a.startsWith("--") && !/^\d+$/.test(a));
+  const limit = Number(args.find((a) => /^\d+$/.test(a)) ?? 500);
+  const write = args.includes("--write");
   if (!contractId) {
-    console.error("usage: bun run baseline <contractId> [limit]");
+    console.error("usage: bun run baseline <contractId> [limit] [--write]");
     process.exit(1);
   }
   const samples = await fetchOutflows(contractId, limit);
@@ -105,6 +128,19 @@ if (import.meta.main) {
     );
     console.log(
       `  → suggestedOutflowThreshold: { "asset": "${b.asset}", "amount": "${b.suggestedAmount}" }   (review + promote into sentinel/kb/)`,
+    );
+  }
+  if (write) {
+    const rec = loadRecord(contractId);
+    if (!rec) {
+      console.error(`\nno KB record for ${contractId} — onboard/distill it before --write.`);
+      process.exit(1);
+    }
+    const computedAt = new Date().toISOString();
+    rec.outflowBaselines = baselines.map((b) => toOutflowBaseline(b, computedAt));
+    saveRecord(rec);
+    console.log(
+      `\nwrote ${rec.outflowBaselines.length} baseline(s) → sentinel/kb/${contractId}.json (reference data for anomaly severity; live outflowThreshold still human-promoted).`,
     );
   }
 }

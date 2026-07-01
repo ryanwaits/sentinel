@@ -10,7 +10,7 @@
  * filter can't express); MVP captures the static facts: archetype, call-graph closure, sensitive
  * fns, and accepted centralization waivers (warn once, don't re-page).
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 // CentralizationWaiver + FindingSignature live in config.ts (kb -> config is the safe import direction).
@@ -19,6 +19,7 @@ import {
   CentralizationWaiver,
   FindingSignature,
   MonitoringConfig,
+  OutflowBaseline,
   SensitiveFn,
   tierForArchetype,
 } from "./config";
@@ -50,6 +51,8 @@ export const KBRecord = z.object({
   auditedAt: z.string().optional(),
   sensitiveFns: z.array(SensitiveFn).default([]),
   waivers: z.array(CentralizationWaiver).default([]),
+  /** Per-asset outflow baselines (Index-derived, `bun run baseline --write`) → Type-2 anomaly severity. */
+  outflowBaselines: z.array(OutflowBaseline).default([]),
   /** Confirmed findings from a prior audit — re-validate + reproduce (calibration anchor). */
   priorFindings: z.array(PriorFinding).default([]),
   /** Provenance — the report this record was distilled from. */
@@ -59,6 +62,16 @@ export type KBRecord = z.infer<typeof KBRecord>;
 
 function recordPath(contractId: string): string {
   return join(KB_DIR, `${contractId}.json`);
+}
+
+/** Write a KB record to `sentinel/kb/<contractId>.json` (validated; creates the dir). */
+export function saveRecord(record: KBRecord): void {
+  mkdirSync(KB_DIR, { recursive: true });
+  writeFileSync(
+    recordPath(record.contractId),
+    `${JSON.stringify(KBRecord.parse(record), null, 2)}\n`,
+    "utf8",
+  );
 }
 
 /** Load + validate a KB record by contractId, or null if absent. */
@@ -105,6 +118,7 @@ export function deriveConfig(contractId: string): MonitoringConfig {
     // and the Type-2 detection signatures distilled from confirmed findings.
     waivers: rec.waivers,
     signatures: rec.priorFindings.flatMap((f) => (f.signature ? [f.signature] : [])),
+    outflowBaselines: rec.outflowBaselines,
     closure: rec.closure,
     route: "default",
     baselineAudited: rec.baselineAudited,

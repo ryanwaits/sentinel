@@ -17,6 +17,7 @@ const config = (over: Partial<MonitoringConfig> = {}): MonitoringConfig => ({
   tier: "monitor",
   sensitiveFns: [],
   signatures: [],
+  outflowBaselines: [],
   waivers: [],
   closure: [],
   route: "default",
@@ -120,5 +121,44 @@ describe("triageFindings", () => {
       }),
     );
     expect(fs.some((f) => f.class === "bug" && f.targetFn === "register")).toBe(true);
+  });
+});
+
+describe("triageFindings — baseline-aware anomaly severity", () => {
+  const withBaseline = config({
+    outflowBaselines: [
+      { asset: "stx", count: 100, p99: "1000000000", max: "2000000000", recipients: ["SP.known"] },
+    ],
+  });
+  const small = (recipient: string): Partial<TriageContext> => ({
+    config: withBaseline,
+    event: { type: "stx_transfer", sender: C, amount: "500000000", recipient },
+    verdict: {
+      notable: true,
+      suspicious: false,
+      amount: 500000000n,
+      reason: "outflow >= threshold",
+    },
+  });
+  const passthrough = (fs: ReturnType<typeof triageFindings>) => fs.find((f) => f.class === "info");
+
+  test("amount above historical max → HIGH → WARN (big and weird)", () => {
+    const fs = triageFindings(ctx({ config: withBaseline })); // default amount 5e12 >> max 2e9
+    expect(passthrough(fs)?.severity).toBe("high");
+    expect(passthrough(fs)?.recommendedAction).toContain("ANOMALY");
+    expect(adj(fs).alertLevel).toBe("warn");
+  });
+
+  test("within baseline (<= p99, known recipient) → MEDIUM → INFO (big but normal)", () => {
+    const fs = triageFindings(ctx(small("SP.known")));
+    expect(passthrough(fs)?.severity).toBe("medium");
+    expect(adj(fs).alertLevel).toBe("info");
+  });
+
+  test("new recipient (even within amount) → HIGH → WARN", () => {
+    const fs = triageFindings(ctx(small("SP.brand-new")));
+    expect(passthrough(fs)?.severity).toBe("high");
+    expect(passthrough(fs)?.recommendedAction).toContain("not among");
+    expect(adj(fs).alertLevel).toBe("warn");
   });
 });
