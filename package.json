@@ -10,6 +10,7 @@
     "test": "SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/",
     "audit": "bun run engine/run.ts",
     "distill": "bun run engine/distill.ts",
+    "baseline": "bun run monitoring/baseline.ts",
     "lint": "biome check agent engine monitoring webhooks simnet subgraphs",
     "format": "biome check --write agent engine monitoring webhooks simnet subgraphs",
     "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
