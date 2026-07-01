@@ -110,4 +110,24 @@ describe("bridge no-dispatch branches", () => {
     );
     expect(res.status).toBe(204);
   });
+
+  // Robustness: the SDK event model uses `event_type` + a nested `payload` (Streams-shape). The bridge
+  // normalizes both; a real delivery in that shape must still route to triage.
+  test("Type-2 transfer via event_type + nested payload (SDK shape) → normalized → 202", async () => {
+    const res = await handle(
+      post(
+        {
+          action: "apply",
+          tx_id: "0xnested",
+          block_height: 22,
+          event: {
+            event_type: "stx_transfer",
+            payload: { sender: TREASURY, amount: "5000000000000", recipient: DAO },
+          },
+        },
+        { "webhook-id": "wh-nested" },
+      ),
+    );
+    expect(res.status).toBe(202);
+  });
 });

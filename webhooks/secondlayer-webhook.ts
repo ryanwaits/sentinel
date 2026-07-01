@@ -66,8 +66,30 @@ function ruleKeyFromPath(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ""));
 }
 
+/**
+ * Normalize a raw chain-subscription delivery into a flat ChainEventBody. secondlayer's event model
+ * uses `event_type` as the discriminator and MAY nest fields under `payload` (Streams-shape) or carry
+ * them flat (Index-shape). We canonicalise both here so downstream code reads one shape. (Exact
+ * field-names confirm on the first live ft/stx_transfer delivery — this handles both documented shapes.)
+ */
+function normalizeEvent(raw: ChainEventBody | undefined): ChainEventBody | undefined {
+  if (!raw) return raw;
+  const p = (raw.payload ?? {}) as Partial<ChainEventBody> & { event_type?: string };
+  return {
+    ...raw,
+    type: raw.event_type ?? raw.type ?? p.event_type,
+    contract_id: raw.contract_id ?? p.contract_id,
+    function_name: raw.function_name ?? p.function_name,
+    function_args: raw.function_args ?? p.function_args,
+    sender: raw.sender ?? p.sender,
+    asset_identifier: raw.asset_identifier ?? p.asset_identifier,
+    amount: raw.amount ?? p.amount,
+    recipient: raw.recipient ?? p.recipient,
+  };
+}
+
 /** A transfer-trigger event (ft/stx outflow sub) carries no function_name; the watched contract is
- *  the SENDER (we scope subs to sender=contract). Discriminate on the event type. */
+ *  the SENDER (we scope subs to sender=contract). Discriminate on the normalized `type`. */
 function isTransferEvent(event: ChainEventBody): boolean {
   return event.type === "ft_transfer" || event.type === "stx_transfer";
 }
@@ -163,7 +185,7 @@ export async function handle(req: Request): Promise<Response> {
     return new Response("rollback acked", { status: 204 });
   }
 
-  const event = payload.event;
+  const event = normalizeEvent(payload.event);
 
   // Type-2 TRANSFER (outflow) event — no function_name; the watched contract is the sender. Route to
   // incident triage (detection), never a re-audit.

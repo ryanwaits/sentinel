@@ -23,9 +23,15 @@
 import { decodeClarityValue } from "@secondlayer/sdk";
 import type { SensitiveFn } from "./config";
 
-/** The decoded chain event carried under the webhook envelope's `event`. */
+/** The decoded chain event carried under the webhook envelope's `event`. The bridge normalizes the
+ *  raw delivery into this flat shape (secondlayer uses `event_type` + sometimes a nested `payload`;
+ *  see normalizeEvent in the webhook bridge), so downstream code reads a canonical `type` + flat fields. */
 export type ChainEventBody = {
   type?: string;
+  /** Raw secondlayer discriminator (`ft_transfer`/`contract_call`/…); normalized into `type`. */
+  event_type?: string;
+  /** Raw nested payload (Streams-shape deliveries); the bridge flattens it into the fields below. */
+  payload?: Record<string, unknown>;
   contract_id?: string;
   function_name?: string;
   /** Clarity values, hex-encoded (decodeClarityValue decodes each). */
