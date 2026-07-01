@@ -1,17 +1,20 @@
 import { NavLink, Outlet } from "react-router-dom"
 import {
   Bell, ScrollText, SlidersHorizontal, ClipboardCheck, Settings, Search, ShieldCheck,
+  type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const NAV = [
+type NavDef = { to: string; label: string; icon: LucideIcon; badge?: number }
+
+const NAV: NavDef[] = [
   { to: "/alerts", label: "Alerts", icon: Bell, badge: 4 },
   { to: "/contracts", label: "Contracts", icon: ScrollText },
   { to: "/monitoring-plan", label: "Monitoring Plan", icon: SlidersHorizontal },
   { to: "/audits", label: "Audits", icon: ClipboardCheck },
-] as const
+]
 
-function NavItem({ to, label, icon: Icon, badge }: (typeof NAV)[number]) {
+function NavItem({ to, label, icon: Icon, badge }: NavDef) {
   return (
     <NavLink
       to={to}
