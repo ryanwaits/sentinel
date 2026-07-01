@@ -15,7 +15,7 @@
   :root{
     --bg: oklch(0.99 0.003 60); --surface: oklch(0.976 0.004 60); --surface-2: oklch(0.985 0.004 60); --panel: oklch(0.966 0.004 60);
     --border: oklch(0.912 0.005 60); --border-strong: oklch(0.86 0.006 60);
-    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.18 0.006 55); --muted: oklch(0.60 0.006 55); --faint: oklch(0.72 0.005 55);
+    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.18 0.006 55); --muted: oklch(0.60 0.006 55); --faint: oklch(0.70 0.005 55);
     --accent: oklch(0.64 0.224 33); --accent-ink: oklch(0.99 0.01 60); --accent-weak: oklch(0.64 0.224 33 / 0.10);
     --medium: oklch(0.70 0.15 66); --success: oklch(0.58 0.135 150); --success-weak: oklch(0.58 0.135 150 / 0.12);
   }
@@ -29,6 +29,8 @@
     }
   }
   *{ box-sizing:border-box; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; } }
   html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
   .mono{ font-family:"Geist Mono", ui-monospace, Menlo, monospace; font-feature-settings:"tnum" 1; }
   h1,h2,h3{ color:var(--ink-strong); letter-spacing:-0.012em; margin:0; font-weight:600; }
@@ -41,7 +43,6 @@
 </head>
 <body>
 <div id="root"></div>
-<script>window.addEventListener("error",(e)=>{window.__err=(e.error&&e.error.stack)||e.message;});</script>
 <script type="text/babel" data-presets="react">
 const { useState } = React;
 const I = {

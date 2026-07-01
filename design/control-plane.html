@@ -22,7 +22,7 @@
     --ink: oklch(0.28 0.006 55);
     --ink-strong: oklch(0.18 0.006 55);
     --muted: oklch(0.60 0.006 55);
-    --faint: oklch(0.72 0.005 55);
+    --faint: oklch(0.70 0.005 55);
     --accent: oklch(0.64 0.224 33);
     --accent-ink: oklch(0.99 0.01 60);
     --accent-weak: oklch(0.64 0.224 33 / 0.10);
@@ -58,6 +58,8 @@
     }
   }
   *{ box-sizing:border-box; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; } }
   html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
     font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.5;
     -webkit-font-smoothing:antialiased; font-variant-ligatures:none; }
@@ -76,7 +78,6 @@
 </head>
 <body>
 <div id="root"></div>
-<script>window.addEventListener("error", (e)=>{ window.__err = (e.error && e.error.stack) || e.message; });</script>
 <script type="text/babel" data-presets="react">
 const { useState } = React;
 
