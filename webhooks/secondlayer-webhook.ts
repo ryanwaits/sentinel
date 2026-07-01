@@ -34,16 +34,27 @@ const FALLBACK_SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
 /** Representative governance timelock window (blocks) for the deadline watchdog. ~1 day at ~10min/block. */
 const TIMELOCK_BLOCKS = Number(process.env.SENTINEL_TIMELOCK_BLOCKS ?? 144);
 
-/** The decoded chain-subscription envelope. The event is under `event.*`, NOT top-level. */
-type ChainWebhook = {
+/** The raw event as delivered — REAL secondlayer deliveries nest the fields under `event.data` and set
+ *  `type: "<trigger>_event"`; synthetic/older deliveries are a flat ChainEventBody. */
+type RawEvent = ChainEventBody & { data?: Record<string, unknown> };
+
+/** The chain delivery, flattened to what the bridge works with (action/tx/block/trigger/event). */
+type ChainDelivery = {
   action?: "apply" | "rollback";
   trigger?: string;
-  block_hash?: string;
   block_height?: number;
   tx_id?: string;
-  canonical?: boolean;
-  event?: ChainEventBody;
+  event?: RawEvent;
 };
+
+/** The raw POST body: REAL secondlayer wraps the delivery under `{ type, data: {...} }`; synthetic/older
+ *  deliveries are the flat ChainDelivery. `unwrapDelivery` collapses both to a ChainDelivery. */
+type ChainWebhook = ChainDelivery & { type?: string; data?: ChainDelivery };
+
+/** Collapse the real `{type, data:{...}}` envelope to a flat delivery; pass a flat one through. */
+function unwrapDelivery(raw: ChainWebhook): ChainDelivery {
+  return raw.data ?? raw;
+}
 
 /**
  * Durable event dedup (tx-based) covers re-delivery; this in-memory set short-circuits an obvious
@@ -72,19 +83,28 @@ function ruleKeyFromPath(url: string): string {
  * them flat (Index-shape). We canonicalise both here so downstream code reads one shape. (Exact
  * field-names confirm on the first live ft/stx_transfer delivery — this handles both documented shapes.)
  */
-function normalizeEvent(raw: ChainEventBody | undefined): ChainEventBody | undefined {
-  if (!raw) return raw;
-  const p = (raw.payload ?? {}) as Partial<ChainEventBody> & { event_type?: string };
+function normalizeEvent(
+  rawEvent: RawEvent | undefined,
+  trigger?: string,
+): ChainEventBody | undefined {
+  if (!rawEvent) return undefined;
+  // REAL deliveries nest the fields under `event.data`; synthetic ones are flat.
+  const f = (rawEvent.data ?? rawEvent) as Partial<ChainEventBody> & {
+    event_type?: string;
+    contract_identifier?: string;
+  };
+  // Canonical type: the delivery `trigger` ("stx_transfer") wins; else strip the "_event" suffix off
+  // the event's own type ("stx_transfer_event"); else event_type.
+  const rawType = trigger ?? rawEvent.event_type ?? rawEvent.type ?? f.event_type;
   return {
-    ...raw,
-    type: raw.event_type ?? raw.type ?? p.event_type,
-    contract_id: raw.contract_id ?? p.contract_id,
-    function_name: raw.function_name ?? p.function_name,
-    function_args: raw.function_args ?? p.function_args,
-    sender: raw.sender ?? p.sender,
-    asset_identifier: raw.asset_identifier ?? p.asset_identifier,
-    amount: raw.amount ?? p.amount,
-    recipient: raw.recipient ?? p.recipient,
+    type: rawType?.replace(/_event$/, ""),
+    contract_id: f.contract_id ?? f.contract_identifier,
+    function_name: f.function_name,
+    function_args: f.function_args,
+    sender: f.sender,
+    asset_identifier: f.asset_identifier,
+    amount: f.amount,
+    recipient: f.recipient,
   };
 }
 
@@ -100,7 +120,7 @@ function isTransferEvent(event: ChainEventBody): boolean {
  * reserve — the code is unchanged, nothing to re-audit). Detection, not prevention.
  */
 async function handleTransfer(
-  payload: ChainWebhook,
+  delivery: ChainDelivery,
   event: ChainEventBody,
   webhookId: string | undefined,
 ): Promise<Response> {
@@ -128,7 +148,7 @@ async function handleTransfer(
     return new Response("no outflow watch for this asset", { status: 204 });
   }
   const fnLabel = `outflow:${asset}`;
-  const key = dedupKey(payload.tx_id, contractId, fnLabel);
+  const key = dedupKey(delivery.tx_id, contractId, fnLabel);
   if (isDuplicate(key)) {
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });
@@ -147,8 +167,8 @@ async function handleTransfer(
     triggerClass: "transfer.outflow",
     event,
     verdict,
-    txId: payload.tx_id,
-    blockHeight: payload.block_height,
+    txId: delivery.tx_id,
+    blockHeight: delivery.block_height,
     dedupKey: key,
   }).catch((err) =>
     console.error(`[bridge] triage failed for ${contractId}: ${(err as Error).message}`),
@@ -175,22 +195,30 @@ export async function handle(req: Request): Promise<Response> {
 
   const payload = JSON.parse(raw) as ChainWebhook;
 
+  // Diagnostic: dump the raw delivered event shape (SENTINEL_DEBUG_RAW) — used to confirm the exact
+  // secondlayer transfer webhook payload on a first live delivery. Off by default.
+  if (process.env.SENTINEL_DEBUG_RAW) {
+    console.log(`[bridge:raw] ${JSON.stringify(payload)}`);
+  }
+  // Collapse the real `{type, data:{...}}` envelope (or a flat synthetic body) to a flat delivery.
+  const delivery = unwrapDelivery(payload);
+
   // 3) reorg — an orphaned tx must NOT fire an audit (real retraction of an in-flight adjudication
   //    is M4). Acknowledge + drop.
-  if (payload.action === "rollback") {
+  if (delivery.action === "rollback") {
     console.log(
-      `[bridge] rollback acked: tx ${payload.tx_id ?? "?"} @ ${payload.block_height ?? "?"} — no dispatch`,
+      `[bridge] rollback acked: tx ${delivery.tx_id ?? "?"} @ ${delivery.block_height ?? "?"} — no dispatch`,
     );
     markHandled(webhookId);
     return new Response("rollback acked", { status: 204 });
   }
 
-  const event = normalizeEvent(payload.event);
+  const event = normalizeEvent(delivery.event, delivery.trigger);
 
   // Type-2 TRANSFER (outflow) event — no function_name; the watched contract is the sender. Route to
   // incident triage (detection), never a re-audit.
   if (event && isTransferEvent(event)) {
-    return handleTransfer(payload, event, webhookId);
+    return handleTransfer(delivery, event, webhookId);
   }
 
   const contractId = event?.contract_id;
@@ -216,7 +244,7 @@ export async function handle(req: Request): Promise<Response> {
   }
 
   // 5) event-level dedup (tx-based) — a replay/re-delivery of the same event is a no-op.
-  const key = dedupKey(payload.tx_id, contractId, fnName);
+  const key = dedupKey(delivery.tx_id, contractId, fnName);
   if (isDuplicate(key)) {
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });
@@ -241,8 +269,8 @@ export async function handle(req: Request): Promise<Response> {
       triggerClass: fn.triggerClass,
       event: event as ChainEventBody,
       verdict,
-      txId: payload.tx_id,
-      blockHeight: payload.block_height,
+      txId: delivery.tx_id,
+      blockHeight: delivery.block_height,
       dedupKey: key,
     }).catch((err) =>
       console.error(`[bridge] triage failed for ${contractId}: ${(err as Error).message}`),
@@ -279,12 +307,12 @@ export async function handle(req: Request): Promise<Response> {
   //    verdict before the slow PoC. SENTINEL_TIMELOCK_BLOCKS is the representative window (real
   //    per-DAO timelock read is a later refinement).
   const deadlineBlock =
-    routeForTriggerClass(fn.triggerClass) === "type1" && payload.block_height
-      ? payload.block_height + TIMELOCK_BLOCKS
+    routeForTriggerClass(fn.triggerClass) === "type1" && delivery.block_height
+      ? delivery.block_height + TIMELOCK_BLOCKS
       : null;
   const { directive } = await buildDirective(config, fn, event as ChainEventBody, verdict, {
-    txId: payload.tx_id,
-    blockHeight: payload.block_height,
+    txId: delivery.tx_id,
+    blockHeight: delivery.block_height,
     deadlineBlock,
   });
 
@@ -300,8 +328,8 @@ export async function handle(req: Request): Promise<Response> {
     fn: fnName,
     triggerClass: fn.triggerClass,
     dedupKey: key,
-    txId: payload.tx_id,
-    blockHeight: payload.block_height,
+    txId: delivery.tx_id,
+    blockHeight: delivery.block_height,
     deadlineBlock: directive.deadline_block,
     auditTargets: directive.audit_targets,
     suspicious: verdict.suspicious,

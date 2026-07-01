@@ -111,21 +111,27 @@ describe("bridge no-dispatch branches", () => {
     expect(res.status).toBe(204);
   });
 
-  // Robustness: the SDK event model uses `event_type` + a nested `payload` (Streams-shape). The bridge
-  // normalizes both; a real delivery in that shape must still route to triage.
-  test("Type-2 transfer via event_type + nested payload (SDK shape) → normalized → 202", async () => {
+  // The REAL secondlayer envelope (captured from a live DLMM stx_transfer delivery, 2026-07-01):
+  // { type:"chain.stx_transfer.apply", data:{ action, tx_id, block_height, trigger:"stx_transfer",
+  //   event:{ type:"stx_transfer_event", data:{ amount, sender, recipient } } } }. The bridge unwraps
+  // `data` + the double-nested `event.data` + strips the `_event` suffix. Must route to triage.
+  test("Type-2 transfer via the REAL nested envelope (data wrapper + event.data) → 202", async () => {
     const res = await handle(
       post(
         {
-          action: "apply",
-          tx_id: "0xnested",
-          block_height: 22,
-          event: {
-            event_type: "stx_transfer",
-            payload: { sender: TREASURY, amount: "5000000000000", recipient: DAO },
+          type: "chain.stx_transfer.apply",
+          data: {
+            action: "apply",
+            tx_id: "0xreal",
+            block_height: 8445086,
+            trigger: "stx_transfer",
+            event: {
+              type: "stx_transfer_event",
+              data: { memo: "", amount: "5000000000000", sender: TREASURY, recipient: DAO },
+            },
           },
         },
-        { "webhook-id": "wh-nested" },
+        { "webhook-id": "wh-real" },
       ),
     );
     expect(res.status).toBe(202);
