@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel · Alerts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg: oklch(0.99 0.003 60);
+    --surface: oklch(0.976 0.004 60);
+    --surface-2: oklch(0.985 0.004 60);
+    --panel: oklch(0.966 0.004 60);
+    --border: oklch(0.912 0.005 60);
+    --border-strong: oklch(0.86 0.006 60);
+    --ink: oklch(0.28 0.006 55);
+    --ink-strong: oklch(0.18 0.006 55);
+    --muted: oklch(0.60 0.006 55);
+    --faint: oklch(0.72 0.005 55);
+    --accent: oklch(0.64 0.224 33);
+    --accent-ink: oklch(0.99 0.01 60);
+    --accent-weak: oklch(0.64 0.224 33 / 0.10);
+    --critical: oklch(0.55 0.225 27);
+    --medium: oklch(0.70 0.15 66);
+    --success: oklch(0.60 0.135 150);
+    --success-weak: oklch(0.60 0.135 150 / 0.12);
+    --ring: oklch(0.64 0.224 33 / 0.35);
+    --shadow-soft: 0 1px 2px oklch(0.2 0.02 55 / 0.06), 0 0 0 1px oklch(0.2 0.02 55 / 0.05);
+    --shadow-pop: 0 1px 2px oklch(0.2 0.02 55 / 0.05), 0 8px 24px -8px oklch(0.2 0.02 55 / 0.14), 0 0 0 1px oklch(0.2 0.02 55 / 0.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.165 0.004 60);
+      --surface: oklch(0.202 0.005 60);
+      --surface-2: oklch(0.235 0.006 60);
+      --panel: oklch(0.185 0.004 60);
+      --border: oklch(0.285 0.006 60);
+      --border-strong: oklch(0.36 0.007 60);
+      --ink: oklch(0.925 0.004 60);
+      --ink-strong: oklch(0.985 0.003 60);
+      --muted: oklch(0.66 0.007 60);
+      --faint: oklch(0.52 0.006 60);
+      --accent: oklch(0.685 0.2 36);
+      --accent-ink: oklch(0.16 0.01 40);
+      --accent-weak: oklch(0.685 0.2 36 / 0.17);
+      --critical: oklch(0.64 0.2 28);
+      --medium: oklch(0.76 0.13 72);
+      --success: oklch(0.70 0.13 152);
+      --success-weak: oklch(0.70 0.13 152 / 0.16);
+      --shadow-soft: 0 0 0 1px oklch(0 0 0 / 0.4);
+      --shadow-pop: 0 8px 24px -8px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; font-variant-ligatures:none; }
+  .mono{ font-family:"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-feature-settings:"tnum" 1; }
+  ::selection{ background:var(--accent-weak); }
+  h1,h2,h3{ color:var(--ink-strong); letter-spacing:-0.012em; margin:0; font-weight:600; }
+  button{ font:inherit; color:inherit; cursor:pointer; background:none; border:none; }
+  ::-webkit-scrollbar{ width:11px; height:11px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:99px; border:3px solid var(--bg); }
+  .tnum{ font-variant-numeric:tabular-nums; }
+  [data-btn]{ transition:background .15s ease, border-color .15s ease, color .15s ease; }
+  [data-row]{ transition:background .15s ease; }
+  .fade-in{ animation:fade .2s cubic-bezier(0.22,1,0.36,1); }
+  @keyframes fade{ from{opacity:0; transform:translateY(2px);} to{opacity:1; transform:none;} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>window.addEventListener("error", (e)=>{ window.__err = (e.error && e.error.stack) || e.message; });</script>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+/* ---------- minimal inline icons (stroke, currentColor) ---------- */
+const I = {
+  logo: (p) => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" {...p}><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  alerts: (p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M12 3a5 5 0 00-5 5c0 4-1.5 5.5-2 6h14c-.5-.5-2-2-2-6a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M10 19a2 2 0 004 0" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  contracts: (p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M9 8h6M9 12h6M9 16h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  plan: (p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  audits: (p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M6 3h9l4 4v14H6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14 3v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M9 14l2 2 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  search: (p)=><svg viewBox="0 0 24 24" width="15" height="15" fill="none" {...p}><circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+  shield: (p)=><svg viewBox="0 0 24 24" width="14" height="14" fill="none" {...p}><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,
+  radar: (p)=><svg viewBox="0 0 24 24" width="14" height="14" fill="none" {...p}><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.4"/><path d="M12 12l6-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
+  chevron:(p)=><svg viewBox="0 0 24 24" width="15" height="15" fill="none" {...p}><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  check:(p)=><svg viewBox="0 0 24 24" width="13" height="13" fill="none" {...p}><path d="M5 12l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+};
+
+/* ---------- primitives ---------- */
+const SEV = { critical:"var(--critical)", high:"var(--accent)", medium:"var(--medium)", info:"var(--muted)" };
+
+function Chip({ children, tone="neutral", solid=false }){
+  const map = {
+    neutral:{bg:"var(--surface-2)", bd:"var(--border)", fg:"var(--muted)"},
+    accent:{bg:"var(--accent-weak)", bd:"transparent", fg:"var(--accent)"},
+    success:{bg:"var(--success-weak)", bd:"transparent", fg:"var(--success)"},
+    critical:{bg:"color-mix(in oklch, var(--critical) 12%, transparent)", bd:"transparent", fg:"var(--critical)"},
+    medium:{bg:"color-mix(in oklch, var(--medium) 16%, transparent)", bd:"transparent", fg:"var(--medium)"},
+    ghost:{bg:"transparent", bd:"var(--border)", fg:"var(--muted)"},
+  }[tone];
+  return <span className="mono" style={{fontSize:11, fontWeight:500, letterSpacing:"0.01em", padding:"2px 7px",
+    borderRadius:6, background:map.bg, border:`1px solid ${map.bd}`, color:map.fg, whiteSpace:"nowrap",
+    display:"inline-flex", alignItems:"center", gap:5, lineHeight:1.4}}>{children}</span>;
+}
+
+function Btn({ children, kind="ghost", onClick }){
+  const base = {padding:"6px 12px", borderRadius:8, fontSize:13, fontWeight:500, border:"1px solid transparent", display:"inline-flex", alignItems:"center", gap:6};
+  const kinds = {
+    primary:{background:"var(--accent)", color:"var(--accent-ink)"},
+    dark:{background:"var(--ink-strong)", color:"var(--bg)"},
+    ghost:{background:"transparent", color:"var(--ink)", borderColor:"var(--border)"},
+    quiet:{background:"transparent", color:"var(--muted)"},
+  }[kind];
+  return <button data-btn onClick={onClick} style={{...base, ...kinds}}
+    onMouseEnter={e=>{ if(kind==="ghost") e.currentTarget.style.background="var(--surface-2)"; if(kind==="quiet") e.currentTarget.style.color="var(--ink)"; }}
+    onMouseLeave={e=>{ if(kind==="ghost") e.currentTarget.style.background="transparent"; if(kind==="quiet") e.currentTarget.style.color="var(--muted)"; }}>{children}</button>;
+}
+
+/* ---------- mock data (from the real Adjudication/Finding shapes) ---------- */
+const ALERTS = [
+  { id:"ccd002-prop", lane:"prevention", state:"open",
+    severity:"critical", cls:"bug", verdict:"confirmed", poc:"green", origin:"audit",
+    contract:"ccd002-treasury-mia-mining-v3", fn:"execute",
+    target:"SP2C2…mia-drain-v1", targetLabel:"proposal → SP2C2…mia-drain-v1",
+    title:"Incoming proposal would drain the treasury on execution",
+    detail:"Audited the proposal contract inside its timelock. It transfers the full STX + FT balance to an out-of-DAO principal with no cap. Reproduced in the sandbox.",
+    action:"Veto before block 8,445,230. After the timelock elapses this executes and becomes irreversible.",
+    blast:"100% of treasury balance (≈ 4.1M STX + 2 FTs)",
+    veto:{ left:6, deadline:"8,445,230", eta:"≈ 58 min" },
+    tx:"0x3af1…c204", block:"8,445,086", when:"just now",
+    cost:"$1.92" },
+  { id:"pool-upgrade", lane:"prevention", state:"missed",
+    severity:"high", cls:"centralization", verdict:"confirmed", poc:"na", origin:"audit",
+    contract:"pool-registry-v3", fn:"set-implementation",
+    target:"SP9K…impl-v4",
+    title:"Implementation swapped to unaudited code",
+    detail:"An upgrade proposal pointed the proxy at a new implementation. Audit finished after the timelock had already elapsed, so this is a record, not a veto opportunity.",
+    action:"Executed at block 8,444,905. Review the live implementation and disclose if the swap is hostile.",
+    blast:"All pool deposits under the proxy",
+    tx:"0x77bd…9a10", block:"8,444,905", when:"3h ago",
+    cost:"$2.14" },
+  { id:"zest-socialize", lane:"detection", state:"open",
+    severity:"high", cls:"bug", verdict:"uncertain", poc:"green", origin:"incident", confidence:0.6,
+    contract:"v0-vault-sbtc", fn:"socialize-debt",
+    title:"Possible exploitation: socialize-debt unbounded LP loss",
+    detail:"A function with a proven vulnerability (Finding 1, green PoC) was invoked on-chain. This is a correlation, not a confirmed exploit.",
+    precondition:"Verify this call passed an unbounded scaled-amount, not a routine authorized write-down.",
+    action:"If the precondition holds, LP redemption value can be driven to zero while sBTC stays locked. Notify Zest and open incident response.",
+    blast:"Up to 100% of LP redemption value",
+    tx:"0x9bd8…dba7", block:"8,445,071", when:"12 min ago" },
+  { id:"dlmm-outflow", lane:"detection", state:"open",
+    severity:"high", cls:"info", verdict:"uncertain", poc:"na", origin:"incident", confidence:0.5,
+    contract:"dlmm-pool-stx-usdcx", fn:"outflow · stx",
+    title:"Anomalous STX outflow to a new counterparty",
+    detail:"An outflow of 1,853,058,049 µSTX left the pool. That exceeds the historical max over the last 300 outflows, and the recipient is not among the 4 known counterparties.",
+    action:"No known-finding match. Behavioral anomaly only. Confirm this is an expected LP withdrawal before escalating.",
+    blast:"1,853.06 STX to SP2V3…RDWT (new)",
+    tx:"0xbdb8…ba71", block:"8,445,090", when:"20 min ago" },
+  { id:"dlmm-normal", lane:"detection", state:"info",
+    severity:"info", cls:"info", verdict:"uncertain", poc:"na", origin:"incident", confidence:0.4,
+    contract:"dlmm-pool-stx-usdcx", fn:"outflow · usdcx",
+    title:"Outflow within baseline",
+    detail:"7.29M µUSDCx to a known counterparty, below the p95 of normal flow. Logged for the record.",
+    action:"No action. Surfaced so the feed is honest about what passed the filter.",
+    blast:"7.29 USDCx to SP120…2CNE (known)",
+    tx:"0x1c04…8fe2", block:"8,445,061", when:"41 min ago" },
+  { id:"zest-borrow", lane:"detection", state:"ack",
+    severity:"high", cls:"centralization", verdict:"confirmed", poc:"na", origin:"incident",
+    contract:"v0-vault-sbtc", fn:"system-borrow",
+    title:"Authorized market drew liquidity to an external receiver",
+    detail:"system-borrow is trust-gated (an authorized contract), an accepted centralization assumption in the KB. Surfaced once.",
+    action:"Acknowledged by you, 2h ago. Suppressed from paging unless the authorized set changes.",
+    blast:"Bounded by the authorized-market allowlist",
+    tx:"0x4410…12aa", block:"8,444,802", when:"2h ago" },
+];
+
+const VERDICT_TONE = { confirmed:"neutral", uncertain:"medium", refuted:"ghost" };
+
+/* ---------- alert row ---------- */
+function AlertRow({ a }){
+  const [open, setOpen] = useState(a.id==="zest-socialize");
+  const [confirm, setConfirm] = useState(null);
+  const dim = a.state==="ack" || a.state==="info";
+  const sev = SEV[a.severity];
+
+  const actions = a.lane==="prevention"
+    ? (a.state==="missed"
+        ? [["Begin disclosure","primary"],["Acknowledge","quiet"]]
+        : [["Veto proposal","primary"],["Begin disclosure","ghost"],["Acknowledge","quiet"]])
+    : (a.state==="ack"
+        ? [["Un-acknowledge","quiet"]]
+        : a.state==="info"
+          ? [["Acknowledge","quiet"],["Dismiss","quiet"]]
+          : [["Notify project","primary"],["Begin incident response","ghost"],["Acknowledge","quiet"]]);
+
+  const outward = new Set(["Veto proposal","Begin disclosure","Notify project","Begin incident response"]);
+
+  return (
+    <div data-row style={{ borderTop:"1px solid var(--border)", opacity:dim?0.72:1,
+      background: open?"var(--surface)":"transparent" }}
+      onMouseEnter={e=>{ if(!open) e.currentTarget.style.background="var(--surface)"; }}
+      onMouseLeave={e=>{ if(!open) e.currentTarget.style.background="transparent"; }}>
+      <div style={{display:"flex", gap:13, padding:"15px 22px", cursor:"pointer"}} onClick={()=>setOpen(o=>!o)}>
+        {/* leading severity indicator — a dot, never a side-stripe */}
+        <div style={{paddingTop:5}}>
+          <span style={{display:"block", width:9, height:9, borderRadius:99, background:sev,
+            boxShadow: a.state==="open" && a.severity!=="info" ? `0 0 0 3px color-mix(in oklch, ${sev} 18%, transparent)`:"none"}}/>
+        </div>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{display:"flex", alignItems:"baseline", gap:10, flexWrap:"wrap"}}>
+            <span style={{fontWeight:500, color:"var(--ink-strong)", fontSize:14.5}}>{a.title}</span>
+            <span className="mono" style={{fontSize:12, color:"var(--muted)"}}>{a.contract}<span style={{color:"var(--faint)"}}> · {a.fn}</span></span>
+          </div>
+          <div style={{display:"flex", gap:7, marginTop:9, flexWrap:"wrap", alignItems:"center"}}>
+            <Chip tone={a.severity==="critical"?"critical":a.severity==="high"?"accent":"neutral"}>{a.severity.toUpperCase()}</Chip>
+            <Chip tone={a.cls==="bug"?"neutral":"ghost"}>{a.cls==="bug"?"● bug":a.cls==="centralization"?"◐ centralization":"○ info"}</Chip>
+            <Chip tone={VERDICT_TONE[a.verdict]}>{a.verdict==="uncertain"?"correlation":a.verdict}</Chip>
+            {a.poc==="green" && <Chip tone="success"><I.check/> PoC green</Chip>}
+            {a.poc==="pending" && <Chip tone="medium">PoC pending</Chip>}
+            {typeof a.confidence==="number" && <Chip tone="ghost">conf {a.confidence.toFixed(2)}</Chip>}
+            <span style={{flex:1}}/>
+            {a.veto && a.state==="open" &&
+              <span className="mono tnum" style={{fontSize:12, color:"var(--accent)", fontWeight:500}}>veto: {a.veto.left} blocks left · {a.veto.eta}</span>}
+            {a.state==="missed" && <Chip tone="ghost">missed · detection only</Chip>}
+            <span className="mono" style={{fontSize:11.5, color:"var(--faint)"}}>{a.when}</span>
+            <span style={{color:"var(--faint)", transform:open?"rotate(90deg)":"none", transition:"transform .15s ease", display:"inline-flex"}}><I.chevron/></span>
+          </div>
+        </div>
+      </div>
+
+      {open &&
+        <div className="fade-in" style={{padding:"2px 22px 20px 44px", display:"grid", gap:14}}>
+          <p style={{margin:0, color:"var(--ink)", maxWidth:"70ch"}}>{a.detail}</p>
+          {a.precondition &&
+            <div style={{fontSize:13, color:"var(--medium)", background:"color-mix(in oklch, var(--medium) 9%, transparent)",
+              padding:"9px 12px", borderRadius:8, maxWidth:"70ch"}}>Precondition to verify: {a.precondition}</div>}
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"12px 26px", fontSize:13}}>
+            <Field label="Recommended action"><span style={{color:"var(--ink)"}}>{a.action}</span></Field>
+            <Field label="Blast radius"><span className="mono">{a.blast}</span></Field>
+            {a.target && <Field label="Audit target"><span className="mono" style={{color:"var(--ink)"}}>{a.target}</span></Field>}
+            <Field label={a.origin==="audit"?"Prevention · Type 1":"Detection · Type 2"}>
+              <span className="mono">tx {a.tx} · block {a.block}{a.cost?` · ${a.cost}`:""}</span></Field>
+          </div>
+          <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", paddingTop:2}}>
+            {actions.map(([label,kind])=>(
+              confirm===label
+                ? <span key={label} style={{display:"inline-flex", gap:6, alignItems:"center", fontSize:13}}>
+                    <span style={{color:"var(--muted)"}}>{label}?</span>
+                    <Btn kind="dark" onClick={()=>setConfirm(null)}>Confirm</Btn>
+                    <Btn kind="quiet" onClick={()=>setConfirm(null)}>Cancel</Btn>
+                  </span>
+                : <Btn key={label} kind={kind} onClick={()=> outward.has(label) ? setConfirm(label) : null}>{label}</Btn>
+            ))}
+            <span style={{flex:1}}/>
+            <span style={{fontSize:12, color:"var(--faint)", display:"inline-flex", alignItems:"center", gap:6}}>
+              <I.shield/> Human-gated · Sentinel routes intent, it never acts on-chain</span>
+          </div>
+        </div>}
+    </div>
+  );
+}
+function Field({label, children}){
+  return <div><div style={{fontSize:11, textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--faint)", marginBottom:3}}>{label}</div><div>{children}</div></div>;
+}
+
+/* ---------- lane ---------- */
+function Lane({ icon, name, blurb, tone, alerts }){
+  return (
+    <section style={{marginBottom:34}}>
+      <div style={{display:"flex", alignItems:"center", gap:9, padding:"0 22px 11px"}}>
+        <span style={{display:"inline-flex", width:26, height:26, borderRadius:7, alignItems:"center", justifyContent:"center",
+          color: tone==="warm"?"var(--accent)":"var(--muted)",
+          background: tone==="warm"?"var(--accent-weak)":"var(--surface-2)", border:"1px solid var(--border)"}}>{icon}</span>
+        <h2 style={{fontSize:13, letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, color:"var(--ink-strong)"}}>{name}</h2>
+        <span style={{fontSize:12.5, color:"var(--muted)"}}>{blurb}</span>
+        <span style={{flex:1}}/>
+        <span className="mono tnum" style={{fontSize:12, color:"var(--faint)"}}>{alerts.length}</span>
+      </div>
+      <div style={{borderBottom:"1px solid var(--border)"}}>
+        {alerts.map(a=> <AlertRow key={a.id} a={a} />)}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- shell ---------- */
+function Nav(){
+  const items = [["Alerts", I.alerts, true, 4],["Contracts", I.contracts, false],["Monitoring Plan", I.plan, false],["Audits", I.audits, false]];
+  return (
+    <aside style={{width:236, flexShrink:0, background:"var(--panel)", borderRight:"1px solid var(--border)",
+      display:"flex", flexDirection:"column", padding:"16px 12px"}}>
+      <div style={{display:"flex", alignItems:"center", gap:9, padding:"4px 8px 20px"}}>
+        <span style={{color:"var(--accent)"}}><I.logo/></span>
+        <span style={{fontWeight:600, fontSize:16, color:"var(--ink-strong)", letterSpacing:"-0.01em"}}>Sentinel</span>
+      </div>
+      <nav style={{display:"grid", gap:2}}>
+        {items.map(([label,icon,active,badge])=>(
+          <a key={label} data-btn href="#" onClick={e=>e.preventDefault()} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
+            borderRadius:8, fontSize:13.5, fontWeight: active?500:450, textDecoration:"none",
+            color: active?"var(--ink-strong)":"var(--muted)", background: active?"var(--surface)":"transparent"}}
+            onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="var(--surface)"; }}
+            onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}>
+            <span style={{color: active?"var(--accent)":"var(--faint)", display:"inline-flex"}}>{icon()}</span>
+            {label}<span style={{flex:1}}/>
+            {badge && <span className="mono tnum" style={{fontSize:11, color:active?"var(--accent)":"var(--faint)"}}>{badge}</span>}
+          </a>
+        ))}
+      </nav>
+      <div style={{flex:1}}/>
+      <div style={{fontSize:11.5, color:"var(--faint)", padding:"8px 10px", borderTop:"1px solid var(--border)", lineHeight:1.5}}>
+        Audit-informed monitoring<br/>Prevention + Detection
+      </div>
+    </aside>
+  );
+}
+
+function TopBar(){
+  return (
+    <header style={{height:56, flexShrink:0, borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:16, padding:"0 22px"}}>
+      <button data-btn style={{display:"flex", alignItems:"center", gap:9, width:340, maxWidth:"40vw", padding:"7px 11px",
+        borderRadius:8, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--muted)", fontSize:13}}>
+        <I.search/> <span style={{flex:1, textAlign:"left"}}>Search contracts, findings, alerts</span>
+        <span className="mono" style={{fontSize:11, border:"1px solid var(--border)", borderRadius:5, padding:"1px 5px", color:"var(--faint)"}}>⌘K</span>
+      </button>
+      <span style={{flex:1}}/>
+      <span style={{fontSize:12.5, color:"var(--muted)", display:"inline-flex", alignItems:"center", gap:7}}>
+        <span style={{width:7, height:7, borderRadius:99, background:"var(--success)"}}/>
+        Watching <b style={{color:"var(--ink)", fontWeight:500}} className="tnum">3</b> contracts · <b style={{color:"var(--ink)", fontWeight:500}} className="tnum">9</b> functions
+      </span>
+      <span className="mono" style={{fontSize:12, color:"var(--faint)"}}>daily spend $4.06 / $50</span>
+    </header>
+  );
+}
+
+function App(){
+  const prevention = ALERTS.filter(a=>a.lane==="prevention");
+  const detection = ALERTS.filter(a=>a.lane==="detection");
+  const needAction = ALERTS.filter(a=>a.state==="open").length;
+  return (
+    <div style={{display:"flex", height:"100vh", overflow:"hidden"}}>
+      <Nav/>
+      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0}}>
+        <TopBar/>
+        <main style={{flex:1, overflow:"auto"}}>
+          <div style={{maxWidth:960, margin:"0 auto", padding:"28px 0 60px"}}>
+            <div style={{padding:"0 22px 22px", display:"flex", alignItems:"flex-end", gap:12}}>
+              <div>
+                <h1 style={{fontSize:24}}>Alerts</h1>
+                <p style={{margin:"5px 0 0", color:"var(--muted)", fontSize:13.5, maxWidth:"64ch"}}>
+                  Every alert is reproduced or correlated to a proven finding, and human-gated. <b style={{color:"var(--ink)", fontWeight:500}}>{needAction}</b> need a decision.
+                </p>
+              </div>
+            </div>
+            <Lane icon={<I.shield/>} name="Prevention" tone="warm"
+              blurb="new code caught inside its timelock, audited before it executes" alerts={prevention}/>
+            <Lane icon={<I.radar/>} name="Detection" tone="cool"
+              blurb="runtime behavior, already on-chain, triaged against what we know" alerts={detection}/>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
