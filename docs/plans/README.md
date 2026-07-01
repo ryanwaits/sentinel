@@ -5,6 +5,7 @@ speculatively. Ordered by when they unlock, not priority.
 
 | plan | status | trigger to start |
 |---|---|---|
+| [webhook-envelope-alignment](./webhook-envelope-alignment.md) | **ready (small)** | adopt secondlayer's `decodeChainWebhook` when it publishes; + fix transfer dedup (`event_index`) — real bug, do anytime |
 | [trigger-routing](./trigger-routing.md) | **near-term** | before a real client's contracts generate behavioral traffic — split notable triggers into audit-new-code (Type 1) vs incident-triage (Type 2) |
 | [discovery-find-value-contracts](./discovery-find-value-contracts.md) | blocked | need PROACTIVE target discovery (vs reactive monitoring); requires the asset-holdings subgraph deployed |
 | [clarity-drift-check](./clarity-drift-check.md) | low-value | a Clarity release changes built-ins and we want the panel auto-updated |
