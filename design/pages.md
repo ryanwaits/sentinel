@@ -19,7 +19,7 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 | Page | Purpose | Status |
 |---|---|---|
 | **Sign in / sign up** | Auth (email/SSO; optionally connect a Stacks address). Table-stakes, low design surface. | ◻︎ |
-| **First-run: onboard a contract** | The activation spine + the moat in motion: paste a contract id → Sentinel audits it → distills a candidate KB → you review/tune the Monitoring Plan → provision subscriptions → live. Multi-step. | ◻︎ |
+| **First-run: onboard a contract** | The activation spine + the moat in motion: paste a contract id → Sentinel audits it → distills a candidate KB → you review/tune the Monitoring Plan → provision subscriptions → live. Multi-step. | ✅ `design/onboarding.html` |
 | **Empty states** | First-run Alerts/Contracts ("watching nothing yet, add your first contract"). Teach the interface. | ◻︎ (part of the app screens) |
 
 ## Platform — the control plane (product register, authenticated)
@@ -33,9 +33,10 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 | Audits (history list) | All audit runs across contracts. | ⋯ (or a tab on Contract detail) |
 | Alert detail (full page) | Deep single-alert investigation (finding, PoC, tx, timeline, disclosure). Inline expand covers MVP. | ⋯ |
 
-## MVP total: ~9 mockups (5 built → ~4 to go)
-Built: **Alerts**, **Landing**, **Contract detail + Monitoring Plan**, **Contracts**, **Audit detail**.
-Remaining: Marketing (How-it-works, Pricing) · Onboarding (Sign-in, First-run) · Platform (Settings).
+## MVP total: ~9 mockups (6 built → ~3 to go)
+Built: **Alerts**, **Landing**, **Monitoring Plan**, **Contracts**, **Audit detail**, **Onboarding first-run**.
+Remaining: Marketing (How-it-works, Pricing) · Onboarding (Sign-in) · Platform (Settings). How-it-works can
+largely reuse `design/sentinel-lifecycle.html`; Sign-in + Settings are low-surface.
 
 ## Recommended mockup sequence
 1. **Landing** — the brand anchor. Flexes the brand register (bigger typographic moments, the hero, the
