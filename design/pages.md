@@ -28,14 +28,14 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 | **Alerts** | The WARN/INFO feed, Prevention + Detection lanes, human-gated actions. | ✅ `design/control-plane.html` |
 | **Contracts** | The watched set: per contract — archetype, monitoring status, subscription health, daily spend, last audit, open alerts. The app's landing view. | ✅ `design/contracts.html` |
 | **Contract detail + Monitoring Plan** | One contract's KB made tunable — the **moat screen**: sensitive fns + trigger classes, thresholds (audit-suggested → you promote), Type-2 signatures, accepted waivers, outflow baselines. Plus its alert + audit history. "Audit suggests, you tune." | ✅ `design/monitoring-plan.html` |
-| **Audit detail** | One audit run: findings (bug vs centralization, honestly labeled), the green-PoC artifact, metrics (cost / turns / latency), the report. The credibility surface. | ◻︎ |
+| **Audit detail** | One audit run: findings (bug vs centralization, honestly labeled), the green-PoC artifact, metrics (cost / turns / latency), the report. The credibility surface. | ✅ `design/audit-detail.html` |
 | **Settings** | Notification routes/channels, daily spend ceiling, team, API keys / webhook secrets. | ◻︎ (lite) |
 | Audits (history list) | All audit runs across contracts. | ⋯ (or a tab on Contract detail) |
 | Alert detail (full page) | Deep single-alert investigation (finding, PoC, tx, timeline, disclosure). Inline expand covers MVP. | ⋯ |
 
-## MVP total: ~9 mockups (4 built → ~5 to go)
-Built: **Alerts**, **Landing**, **Contract detail + Monitoring Plan**, **Contracts**. Remaining: Marketing
-(How-it-works, Pricing) · Onboarding (Sign-in, First-run) · Platform (Audit detail, Settings).
+## MVP total: ~9 mockups (5 built → ~4 to go)
+Built: **Alerts**, **Landing**, **Contract detail + Monitoring Plan**, **Contracts**, **Audit detail**.
+Remaining: Marketing (How-it-works, Pricing) · Onboarding (Sign-in, First-run) · Platform (Settings).
 
 ## Recommended mockup sequence
 1. **Landing** — the brand anchor. Flexes the brand register (bigger typographic moments, the hero, the

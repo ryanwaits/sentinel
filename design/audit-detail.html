@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel · Audit · v0-vault-sbtc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg: oklch(0.99 0.003 60); --surface: oklch(0.976 0.004 60); --surface-2: oklch(0.985 0.004 60); --panel: oklch(0.966 0.004 60);
+    --border: oklch(0.912 0.005 60); --border-strong: oklch(0.86 0.006 60);
+    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.18 0.006 55); --muted: oklch(0.60 0.006 55); --faint: oklch(0.72 0.005 55);
+    --accent: oklch(0.64 0.224 33); --accent-ink: oklch(0.99 0.01 60); --accent-weak: oklch(0.64 0.224 33 / 0.10);
+    --critical: oklch(0.55 0.225 27); --medium: oklch(0.70 0.15 66); --success: oklch(0.58 0.135 150); --success-weak: oklch(0.58 0.135 150 / 0.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.165 0.004 60); --surface: oklch(0.202 0.005 60); --surface-2: oklch(0.235 0.006 60); --panel: oklch(0.185 0.004 60);
+      --border: oklch(0.285 0.006 60); --border-strong: oklch(0.36 0.007 60);
+      --ink: oklch(0.925 0.004 60); --ink-strong: oklch(0.985 0.003 60); --muted: oklch(0.66 0.007 60); --faint: oklch(0.52 0.006 60);
+      --accent: oklch(0.685 0.2 36); --accent-ink: oklch(0.16 0.01 40); --accent-weak: oklch(0.685 0.2 36 / 0.17);
+      --critical: oklch(0.64 0.2 28); --medium: oklch(0.76 0.13 72); --success: oklch(0.70 0.13 152); --success-weak: oklch(0.70 0.13 152 / 0.16);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .mono{ font-family:"Geist Mono", ui-monospace, Menlo, monospace; font-feature-settings:"tnum" 1; }
+  h1,h2,h3{ color:var(--ink-strong); letter-spacing:-0.012em; margin:0; font-weight:600; }
+  button{ font:inherit; color:inherit; cursor:pointer; background:none; border:none; }
+  .tnum{ font-variant-numeric:tabular-nums; }
+  ::-webkit-scrollbar{ width:11px; height:11px; } ::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:99px; border:3px solid var(--bg); }
+  [data-btn],[data-row]{ transition:background .15s ease, border-color .15s ease, color .15s ease; }
+  .fade-in{ animation:fade .2s cubic-bezier(0.22,1,0.36,1); } @keyframes fade{ from{opacity:0; transform:translateY(2px);} to{opacity:1;} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>window.addEventListener("error",(e)=>{window.__err=(e.error&&e.error.stack)||e.message;});</script>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+const I = {
+  logo:(p)=><svg viewBox="0 0 24 24" width="20" height="20" fill="none" {...p}><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  alerts:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M12 3a5 5 0 00-5 5c0 4-1.5 5.5-2 6h14c-.5-.5-2-2-2-6a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M10 19a2 2 0 004 0" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  contracts:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M9 8h6M9 12h6M9 16h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  plan:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  audits:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M6 3h9l4 4v14H6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14 3v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M9 14l2 2 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  search:(p)=><svg viewBox="0 0 24 24" width="15" height="15" fill="none" {...p}><circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+  chevron:(p)=><svg viewBox="0 0 24 24" width="15" height="15" fill="none" {...p}><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  check:(p)=><svg viewBox="0 0 24 24" width="12" height="12" fill="none" {...p}><path d="M5 12l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  x:(p)=><svg viewBox="0 0 24 24" width="12" height="12" fill="none" {...p}><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
+};
+function Chip({children, tone="neutral"}){
+  const m = { neutral:["var(--surface-2)","var(--border)","var(--muted)"], accent:["var(--accent-weak)","transparent","var(--accent)"],
+    success:["var(--success-weak)","transparent","var(--success)"], ghost:["transparent","var(--border)","var(--muted)"],
+    crit:["color-mix(in oklch,var(--critical) 12%,transparent)","transparent","var(--critical)"], warn:["color-mix(in oklch,var(--medium) 16%,transparent)","transparent","var(--medium)"] }[tone];
+  return <span className="mono" style={{fontSize:11, fontWeight:500, padding:"2px 7px", borderRadius:6, background:m[0], border:`1px solid ${m[1]}`, color:m[2], display:"inline-flex", alignItems:"center", gap:5, whiteSpace:"nowrap"}}>{children}</span>;
+}
+function Btn({children, kind="ghost", onClick}){
+  const base={padding:"7px 13px", borderRadius:8, fontSize:13, fontWeight:500, border:"1px solid transparent", display:"inline-flex", alignItems:"center", gap:6};
+  const k={ primary:{background:"var(--accent)", color:"var(--accent-ink)"}, ghost:{background:"transparent", color:"var(--ink)", borderColor:"var(--border-strong)"} }[kind];
+  return <button data-btn onClick={onClick} style={{...base,...k}} onMouseEnter={e=>{if(kind==="ghost")e.currentTarget.style.background="var(--surface)";}} onMouseLeave={e=>{if(kind==="ghost")e.currentTarget.style.background="transparent";}}>{children}</button>;
+}
+const Field=({label,children})=> <div><div style={{fontSize:10.5, textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--faint)", marginBottom:3}}>{label}</div><div>{children}</div></div>;
+
+function Terminal(){
+  const L = (c,cls)=><div className={cls}>{c}</div>;
+  return <div style={{border:"1px solid var(--border)", borderRadius:10, overflow:"hidden", fontFamily:'"Geist Mono",monospace', fontSize:12.5, background:"var(--bg)"}}>
+    <div style={{padding:"8px 13px", borderBottom:"1px solid var(--border)", color:"var(--faint)", fontSize:11, background:"var(--surface-2)"}}>run_simnet_poc · finding-1.ts · docker run --network none</div>
+    <div style={{padding:"13px 14px", lineHeight:1.75, color:"var(--ink)"}}>
+      <div style={{color:"var(--ink-strong)"}}><span style={{color:"var(--faint)"}}>$</span> docker run --rm --network none audit-sentinel-simnet</div>
+      <div style={{color:"var(--faint)"}}>deploying v0-vault-sbtc + sbtc-token in simnet…</div>
+      <div>call socialize-debt(scaled-amount: u50000000000) <span style={{color:"var(--accent)"}}>← one authorized market</span></div>
+      <div>assert total-assets == u0 <span style={{color:"var(--success)"}}>ok</span></div>
+      <div>assert redeem() reverts ERR-OUTPUT-ZERO <span style={{color:"var(--success)"}}>ok</span></div>
+      <div>assert 50001000 sats sBTC locked <span style={{color:"var(--success)"}}>ok</span></div>
+      <div style={{marginTop:6, color:"var(--success)"}}>✓ FINDING 1 REPRODUCED: 15 assertions passed.</div>
+    </div>
+  </div>;
+}
+
+const RUN = { contract:"v0-vault-sbtc", tier:"deep", when:"4d ago", model:"Opus 4.8", cost:"$2.21", duration:"8m 24s", turns:47, subagents:5, tokens:"1.24M" };
+const FINDINGS = [
+  { id:"F1", sev:"critical", cls:"bug", verdict:"confirmed", poc:"green", fn:"socialize-debt",
+    title:"socialize-debt forces unbounded LP loss",
+    desc:"Any single authorized market can call socialize-debt with an unbounded scaled-amount. No cap, no precondition, no attested loss. It drives total-assets to zero, so LP redemption reverts ERR-OUTPUT-ZERO while the sBTC stays locked.",
+    blast:"100% of LP redemption value", pocFile:"simnet/poc/finding-1.ts", asserts:"15 / 15", term:true },
+  { id:"F2", sev:"medium", cls:"centralization", verdict:"confirmed", poc:"na", fn:"system-borrow", waived:true,
+    title:"Authorized markets can draw vault liquidity",
+    desc:"system-borrow lets a trust-gated authorized contract move liquidity to an external receiver. This is a centralization / trust assumption, not a bug: it is bounded by the authorized-market allowlist and is by design. Labeled as such, and waived in the monitoring plan (surfaced once).",
+    blast:"Bounded by the authorized-market allowlist" },
+  { id:"F3", sev:null, cls:"bug", verdict:"refuted", poc:"na", fn:"redeem",
+    title:"Possible reentrancy in redeem withdrawal",
+    desc:"An auditor subagent flagged a possible reentrancy in redeem. The adversarial verifier refuted it: redeem debits shares before the sBTC transfer, and there is no external call back into the vault on this path. Dropped before it could ship.",
+    refutedBy:"adversarial verifier" },
+];
+
+function Finding({f, i}){
+  const [open, setOpen] = useState(i===0);
+  const refuted = f.verdict==="refuted";
+  const sevColor = {critical:"var(--critical)", high:"var(--accent)", medium:"var(--medium)"}[f.sev] || "var(--faint)";
+  return (
+    <div data-row style={{borderTop:i?"1px solid var(--border)":"none", background: open?"var(--surface)":"transparent", opacity:refuted?0.66:1}}
+      onMouseEnter={e=>{if(!open)e.currentTarget.style.background="var(--surface)";}} onMouseLeave={e=>{if(!open)e.currentTarget.style.background="transparent";}}>
+      <div style={{display:"flex", gap:13, padding:"15px 20px", cursor:"pointer", alignItems:"flex-start"}} onClick={()=>setOpen(o=>!o)}>
+        <span className="mono" style={{fontSize:12, color:"var(--faint)", paddingTop:2, width:20}}>{f.id}</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{display:"flex", gap:9, alignItems:"baseline", flexWrap:"wrap"}}>
+            <span style={{fontWeight:500, color:"var(--ink-strong)", fontSize:14.5, textDecoration:refuted?"line-through":"none", textDecorationColor:"var(--faint)"}}>{f.title}</span>
+            <span className="mono" style={{fontSize:12, color:"var(--muted)"}}>fn {f.fn}</span>
+          </div>
+          <div style={{display:"flex", gap:7, marginTop:9, flexWrap:"wrap", alignItems:"center"}}>
+            {f.sev && <Chip tone={f.sev==="critical"?"crit":f.sev==="medium"?"warn":"accent"}>{f.sev.toUpperCase()}</Chip>}
+            <Chip tone={f.cls==="bug"?"neutral":"ghost"}>{f.cls==="bug"?"● bug":"◐ centralization"}</Chip>
+            {f.verdict==="confirmed" && <Chip tone="neutral">confirmed</Chip>}
+            {refuted && <Chip tone="ghost"><I.x/> refuted</Chip>}
+            {f.poc==="green" && <Chip tone="success"><I.check/> PoC green · {f.asserts}</Chip>}
+            {f.waived && <Chip tone="ghost">waived</Chip>}
+            <span style={{flex:1}}/>
+            <span style={{color:"var(--faint)", transform:open?"rotate(90deg)":"none", transition:"transform .15s ease", display:"inline-flex"}}><I.chevron/></span>
+          </div>
+        </div>
+      </div>
+      {open &&
+        <div className="fade-in" style={{padding:"0 20px 20px 53px", display:"grid", gap:15}}>
+          <p style={{margin:0, color:"var(--ink)", maxWidth:"72ch"}}>{f.desc}</p>
+          {refuted
+            ? <div style={{fontSize:13, color:"var(--muted)", display:"inline-flex", gap:8, alignItems:"center"}}><Chip tone="ghost"><I.x/> refuted by the {f.refutedBy}</Chip> not shipped, no PoC required</div>
+            : <div style={{display:"flex", gap:30, flexWrap:"wrap", fontSize:13}}>
+                <Field label="Class">{f.cls==="bug"?<span style={{color:"var(--ink)"}}>Real bug</span>:<span style={{color:"var(--ink)"}}>Centralization / trust</span>}</Field>
+                <Field label="Blast radius"><span className="mono">{f.blast}</span></Field>
+                {f.pocFile && <Field label="Reproduction"><span className="mono" style={{color:"var(--ink)"}}>{f.pocFile}</span></Field>}
+              </div>}
+          {f.term && <Terminal/>}
+        </div>}
+    </div>
+  );
+}
+
+function Nav(){
+  const items=[["Alerts",I.alerts,false,4],["Contracts",I.contracts,false],["Monitoring Plan",I.plan,false],["Audits",I.audits,true]];
+  return <aside style={{width:236, flexShrink:0, background:"var(--panel)", borderRight:"1px solid var(--border)", display:"flex", flexDirection:"column", padding:"16px 12px"}}>
+    <div style={{display:"flex", alignItems:"center", gap:9, padding:"4px 8px 20px"}}><span style={{color:"var(--accent)"}}><I.logo/></span><span style={{fontWeight:600, fontSize:16, color:"var(--ink-strong)"}}>Sentinel</span></div>
+    <nav style={{display:"grid", gap:2}}>{items.map(([l,ic,act,b])=>(
+      <a key={l} data-btn href="#" onClick={e=>e.preventDefault()} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, fontSize:13.5, textDecoration:"none", fontWeight:act?500:450, color:act?"var(--ink-strong)":"var(--muted)", background:act?"var(--surface)":"transparent"}}
+        onMouseEnter={e=>{if(!act)e.currentTarget.style.background="var(--surface)";}} onMouseLeave={e=>{if(!act)e.currentTarget.style.background="transparent";}}>
+        <span style={{color:act?"var(--accent)":"var(--faint)", display:"inline-flex"}}>{ic()}</span>{l}<span style={{flex:1}}/>{b&&<span className="mono tnum" style={{fontSize:11, color:"var(--faint)"}}>{b}</span>}</a>))}
+    </nav>
+    <div style={{flex:1}}/>
+    <div style={{fontSize:11.5, color:"var(--faint)", padding:"8px 10px", borderTop:"1px solid var(--border)"}}>Audit-informed monitoring<br/>Prevention + Detection</div>
+  </aside>;
+}
+function TopBar(){
+  return <header style={{height:56, flexShrink:0, borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:16, padding:"0 24px"}}>
+    <button data-btn style={{display:"flex", alignItems:"center", gap:9, width:320, maxWidth:"36vw", padding:"7px 11px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--muted)", fontSize:13}}>
+      <I.search/><span style={{flex:1, textAlign:"left"}}>Search</span><span className="mono" style={{fontSize:11, border:"1px solid var(--border)", borderRadius:5, padding:"1px 5px", color:"var(--faint)"}}>⌘K</span></button>
+    <span style={{flex:1}}/>
+    <span style={{fontSize:12.5, color:"var(--muted)", display:"inline-flex", alignItems:"center", gap:7}}><span style={{width:7,height:7,borderRadius:99,background:"var(--success)"}}/>Watching <b style={{color:"var(--ink)",fontWeight:500}} className="tnum">3</b> contracts · <b style={{color:"var(--ink)",fontWeight:500}} className="tnum">9</b> functions</span>
+  </header>;
+}
+function Metric({v,l}){ return <div style={{padding:"12px 18px", borderRight:"1px solid var(--border)", flex:1}}><div className="mono tnum" style={{fontSize:16, fontWeight:500, color:"var(--ink-strong)"}}>{v}</div><div style={{fontSize:11.5, color:"var(--muted)", marginTop:2}}>{l}</div></div>; }
+
+function App(){
+  return (
+    <div style={{display:"flex", height:"100vh", overflow:"hidden"}}>
+      <Nav/>
+      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0}}>
+        <TopBar/>
+        <main style={{flex:1, overflow:"auto"}}>
+          <div style={{maxWidth:920, margin:"0 auto", padding:"26px 0 70px"}}>
+            <div style={{padding:"0 24px"}}>
+              <div style={{fontSize:12.5, color:"var(--muted)", marginBottom:10}}>Audits <span style={{color:"var(--faint)"}}>/</span> v0-vault-sbtc <span style={{color:"var(--faint)"}}>/</span> <span style={{color:"var(--ink)"}}>run 4d ago</span></div>
+              <div style={{display:"flex", alignItems:"flex-start", gap:14, flexWrap:"wrap"}}>
+                <div>
+                  <h1 style={{fontSize:22, display:"flex", alignItems:"center", gap:10}}>Audit · v0-vault-sbtc <Chip tone="accent">deep</Chip></h1>
+                  <div style={{fontSize:13, color:"var(--muted)", marginTop:8}}>
+                    <b style={{color:"var(--ink)", fontWeight:500}}>1 confirmed bug</b> (green PoC) · <b style={{color:"var(--ink)", fontWeight:500}}>1 centralization</b> (waived) · <b style={{color:"var(--ink)", fontWeight:500}}>1 refuted</b> and dropped
+                  </div>
+                </div>
+                <span style={{flex:1}}/>
+                <div style={{display:"flex", gap:8}}><Btn kind="ghost">Export report</Btn><Btn kind="ghost">Re-run</Btn></div>
+              </div>
+
+              {/* run metrics */}
+              <div style={{margin:"20px 0 4px", border:"1px solid var(--border)", borderRadius:11, display:"flex", background:"var(--surface-2)", overflow:"hidden"}}>
+                <Metric v={RUN.cost} l="cost"/><Metric v={RUN.duration} l="wall time"/><Metric v={RUN.model} l="model"/>
+                <Metric v={RUN.turns} l="agent turns"/><Metric v={RUN.subagents} l="subagents"/>
+                <div style={{padding:"12px 18px", flex:1}}><div className="mono tnum" style={{fontSize:16, fontWeight:500, color:"var(--ink-strong)"}}>{RUN.tokens}</div><div style={{fontSize:11.5, color:"var(--muted)", marginTop:2}}>tokens</div></div>
+              </div>
+            </div>
+
+            {/* credibility note */}
+            <div style={{margin:"22px 24px 18px", display:"flex", gap:10, alignItems:"flex-start", padding:"12px 14px", borderRadius:10, background:"var(--accent-weak)"}}>
+              <span style={{color:"var(--accent)", marginTop:1}}><I.check/></span>
+              <p style={{margin:0, fontSize:13, color:"var(--ink)", maxWidth:"80ch"}}>
+                Every finding is adversarially verified, and every real bug is reproduced in an airgapped sandbox before it ships. Refuted findings are shown, not hidden. <b style={{fontWeight:500}}>No green PoC, no ship.</b>
+              </p>
+            </div>
+
+            {/* findings */}
+            <div style={{margin:"0 24px"}}>
+              <div style={{fontSize:11, textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--faint)", padding:"0 0 10px 4px"}}>Findings</div>
+              <div style={{border:"1px solid var(--border)", borderRadius:11, overflow:"hidden"}}>
+                {FINDINGS.map((f,i)=> <Finding key={f.id} f={f} i={i}/>)}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
