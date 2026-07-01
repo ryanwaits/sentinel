@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel · Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg: oklch(0.99 0.003 60); --surface: oklch(0.976 0.004 60); --surface-2: oklch(0.985 0.004 60);
+    --border: oklch(0.912 0.005 60); --border-strong: oklch(0.86 0.006 60);
+    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.17 0.006 55); --muted: oklch(0.56 0.006 55); --faint: oklch(0.70 0.005 55);
+    --accent: oklch(0.64 0.224 33); --accent-ink: oklch(0.99 0.01 60); --accent-weak: oklch(0.64 0.224 33 / 0.09);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.165 0.004 60); --surface: oklch(0.205 0.005 60); --surface-2: oklch(0.235 0.006 60);
+      --border: oklch(0.285 0.006 60); --border-strong: oklch(0.36 0.007 60);
+      --ink: oklch(0.9 0.004 60); --ink-strong: oklch(0.98 0.003 60); --muted: oklch(0.64 0.007 60); --faint: oklch(0.52 0.006 60);
+      --accent: oklch(0.7 0.2 38); --accent-ink: oklch(0.16 0.01 40); --accent-weak: oklch(0.7 0.2 38 / 0.16);
+    }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; display:grid; grid-template-columns:1.05fr 1fr; }
+  .mono{ font-family:"Geist Mono", ui-monospace, Menlo, monospace; }
+  h1,h2{ margin:0; color:var(--ink-strong); font-weight:600; letter-spacing:-0.02em; }
+  a{ color:inherit; }
+  /* brand panel */
+  .panel{ background:var(--surface-2); border-right:1px solid var(--border); padding:44px 48px; display:flex; flex-direction:column; }
+  .brand{ display:flex; align-items:center; gap:9px; font-weight:600; font-size:17px; color:var(--ink-strong); }
+  .panel .big{ font-size:clamp(26px,2.6vw,36px); font-weight:600; color:var(--ink-strong); letter-spacing:-0.02em; line-height:1.15; max-width:16ch; }
+  .quote{ border:1px solid var(--border); border-radius:12px; background:var(--bg); padding:18px 20px; }
+  /* form */
+  .form{ display:flex; align-items:center; justify-content:center; padding:44px 28px; }
+  .card{ width:100%; max-width:360px; }
+  .sso{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:46px; border-radius:10px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-strong); font-weight:500; font-size:14.5px; cursor:pointer; transition:background .15s ease; }
+  .sso:hover{ background:var(--surface-2); }
+  .divider{ display:flex; align-items:center; gap:12px; color:var(--faint); font-size:12.5px; margin:20px 0; }
+  .divider::before,.divider::after{ content:""; flex:1; height:1px; background:var(--border); }
+  .field{ display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:10px; padding:11px 13px; background:var(--surface); }
+  .field:focus-within{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-weak); }
+  input{ flex:1; border:none; outline:none; background:transparent; color:var(--ink); font:inherit; font-size:14.5px; }
+  .btn-primary{ width:100%; height:46px; border-radius:10px; border:none; background:var(--accent); color:var(--accent-ink); font-weight:500; font-size:14.5px; cursor:pointer; margin-top:12px; }
+  .wallet{ width:100%; height:44px; border-radius:10px; border:1px dashed var(--border-strong); background:transparent; color:var(--muted); font-weight:450; font-size:13.5px; cursor:pointer; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .wallet:hover{ color:var(--ink); border-color:var(--accent); }
+  @media (max-width:800px){ body{ grid-template-columns:1fr; } .panel{ display:none; } }
+</style>
+</head>
+<body>
+  <aside class="panel">
+    <a class="brand" href="#"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" style="color:var(--accent)"><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Sentinel</a>
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:28px; max-width:440px">
+      <h1 class="big">Catch the exploit at the audit. Then watch for it on-chain.</h1>
+      <div class="quote">
+        <div class="mono" style="font-size:12px; color:var(--faint); margin-bottom:10px">a real finding, reproduced</div>
+        <p style="margin:0; font-size:14px; color:var(--ink); line-height:1.55">"One authorized contract could drive the Zest sBTC vault's total assets to zero. Sentinel found it, and proved it in an airgapped sandbox, 15 of 15 assertions green."</p>
+      </div>
+    </div>
+    <p class="mono" style="font-size:12px; color:var(--faint); margin:0">Audit-informed security monitoring for Stacks. Powered by secondlayer.</p>
+  </aside>
+
+  <main class="form">
+    <div class="card">
+      <h2 style="font-size:24px">Sign in to Sentinel</h2>
+      <p style="color:var(--muted); margin:8px 0 26px; font-size:14px">Watch your contracts the way an auditor would.</p>
+
+      <div style="display:grid; gap:10px">
+        <button class="sso"><svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.2c0-.8-.1-1.4-.2-2H12v3.8h5.9a5 5 0 01-2.2 3.3v2.7h3.6c2.1-2 3.2-4.9 3.2-7.8z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.7l-3.6-2.7c-1 .7-2.3 1.1-3.6 1.1-2.8 0-5.2-1.9-6-4.4H2.3v2.8A11 11 0 0012 23z"/><path fill="#FBBC05" d="M6 14.3a6.6 6.6 0 010-4.2V7.3H2.3a11 11 0 000 9.8L6 14.3z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 002.3 7.3L6 10.1c.8-2.5 3.2-4.4 6-4.4z"/></svg>Continue with Google</button>
+        <button class="sso"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.7.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 015 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10.2 10.2 0 0022 12.2C22 6.6 17.5 2 12 2z"/></svg>Continue with GitHub</button>
+      </div>
+
+      <div class="divider">or</div>
+
+      <div class="field"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="color:var(--faint)"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="1.5"/></svg><input type="email" placeholder="you@protocol.xyz"/></div>
+      <button class="btn-primary">Continue with email</button>
+      <button class="wallet"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="color:currentColor"><rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M16 12h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Connect a Stacks wallet</button>
+
+      <p style="text-align:center; color:var(--muted); font-size:13px; margin-top:24px">New to Sentinel? <a href="#" style="color:var(--accent); font-weight:500">Start monitoring</a></p>
+      <p style="text-align:center; color:var(--faint); font-size:12px; margin-top:18px; line-height:1.5">By continuing you agree to the terms and the coordinated-disclosure policy.</p>
+    </div>
+  </main>
+</body>
+</html>

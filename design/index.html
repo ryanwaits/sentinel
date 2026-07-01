@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel · Design mocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg: oklch(0.99 0.003 60); --surface: oklch(0.976 0.004 60); --surface-2: oklch(0.985 0.004 60);
+    --border: oklch(0.912 0.005 60); --border-strong: oklch(0.86 0.006 60);
+    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.17 0.006 55); --muted: oklch(0.56 0.006 55); --faint: oklch(0.70 0.005 55);
+    --accent: oklch(0.64 0.224 33); --accent-weak: oklch(0.64 0.224 33 / 0.09); --success: oklch(0.58 0.135 150);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.155 0.004 60); --surface: oklch(0.2 0.005 60); --surface-2: oklch(0.235 0.006 60);
+      --border: oklch(0.285 0.006 60); --border-strong: oklch(0.36 0.007 60);
+      --ink: oklch(0.9 0.004 60); --ink-strong: oklch(0.98 0.003 60); --muted: oklch(0.64 0.007 60); --faint: oklch(0.5 0.006 60);
+      --accent: oklch(0.7 0.2 38); --accent-weak: oklch(0.7 0.2 38 / 0.16); --success: oklch(0.72 0.13 152);
+    }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .mono{ font-family:"Geist Mono", ui-monospace, Menlo, monospace; }
+  h1{ margin:0; color:var(--ink-strong); font-weight:600; letter-spacing:-0.02em; font-size:30px; }
+  h2{ margin:0; color:var(--ink-strong); font-weight:600; font-size:13px; letter-spacing:0.06em; text-transform:uppercase; }
+  a{ color:inherit; text-decoration:none; }
+  .wrap{ max-width:1000px; margin:0 auto; padding:56px 28px 80px; }
+  .brand{ display:flex; align-items:center; gap:10px; font-weight:600; font-size:18px; color:var(--ink-strong); }
+  .grp{ margin-top:40px; } .grp .lbl{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px; }
+  .card{ border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:18px 20px; transition:border-color .15s ease, background .15s ease; display:block; }
+  .card:hover{ border-color:var(--accent); background:var(--surface-2); }
+  .card .t{ display:flex; align-items:center; gap:9px; }
+  .card h3{ margin:0; font-size:16px; color:var(--ink-strong); font-weight:500; letter-spacing:-0.01em; }
+  .card p{ margin:8px 0 0; font-size:13px; color:var(--muted); line-height:1.5; }
+  .tag{ font-family:"Geist Mono",monospace; font-size:10.5px; font-weight:500; padding:2px 7px; border-radius:5px; background:var(--surface-2); border:1px solid var(--border); color:var(--faint); }
+  .tag.b{ background:var(--accent-weak); border-color:transparent; color:var(--accent); }
+  .arrow{ margin-left:auto; color:var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" style="color:var(--accent)"><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Sentinel</div>
+  <h1 style="margin-top:22px">Design mocks</h1>
+  <p style="color:var(--muted); margin-top:10px; max-width:64ch">The MVP surface, one design system (Warp-derived tokens, Geist, light + dark via <span class="mono" style="font-size:13px">prefers-color-scheme</span>) and one voice (Datadog-style). Click any screen. All are self-contained and runnable.</p>
+
+  <div class="grp">
+    <div class="lbl"><h2>Marketing</h2><span class="tag b">brand register</span></div>
+    <div class="grid">
+      <a class="card" href="landing.html"><div class="t"><h3>Landing</h3><span class="arrow">→</span></div><p>The pitch: Prevention + Detection, the moat, a real-finding proof, CTA.</p></a>
+      <a class="card" href="pricing.html"><div class="t"><h3>Pricing</h3><span class="arrow">→</span></div><p>Audit / Monitor / Enterprise tiers, priced like software not an audit firm.</p></a>
+      <a class="card" href="sentinel-lifecycle.html"><div class="t"><h3>How it works</h3><span class="arrow">→</span></div><p>The lifecycle: audit → distill → provision → detect → alert.</p></a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="lbl"><h2>Onboarding</h2><span class="tag">product register</span></div>
+    <div class="grid">
+      <a class="card" href="sign-in.html"><div class="t"><h3>Sign in</h3><span class="arrow">→</span></div><p>SSO, email, or connect a Stacks wallet. Split brand panel.</p></a>
+      <a class="card" href="onboarding.html"><div class="t"><h3>First-run</h3><span class="arrow">→</span></div><p>Add → audit → review the Monitoring Plan → go live. Walkable 4-step wizard.</p></a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="lbl"><h2>Platform</h2><span class="tag">product register</span></div>
+    <div class="grid">
+      <a class="card" href="contracts.html"><div class="t"><h3>Contracts</h3><span class="arrow">→</span></div><p>The watched set: status, coverage, alerts, spend. The app home.</p></a>
+      <a class="card" href="monitoring-plan.html"><div class="t"><h3>Monitoring Plan</h3><span class="arrow">→</span></div><p>The moat: the KB made tunable. Audit suggests, you promote to live.</p></a>
+      <a class="card" href="control-plane.html"><div class="t"><h3>Alerts</h3><span class="arrow">→</span></div><p>Prevention + Detection lanes, human-gated actions.</p></a>
+      <a class="card" href="audit-detail.html"><div class="t"><h3>Audit detail</h3><span class="arrow">→</span></div><p>Findings (bug vs centralization), the green PoC, run metrics.</p></a>
+      <a class="card" href="settings.html"><div class="t"><h3>Settings</h3><span class="arrow">→</span></div><p>Notification routes, spend ceiling, team, API + webhook secrets.</p></a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

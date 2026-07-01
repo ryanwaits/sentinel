@@ -10,15 +10,15 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 | Page | Purpose | Status |
 |---|---|---|
 | **Landing / home** | The pitch: audit-informed security monitoring = Prevention + Detection. Hero, the two-pillar story, the moat ("your audit generates the monitoring"), a product peek, proof (the Zest socialize-debt finding + green PoC), CTA. | ✅ `design/landing.html` |
-| **How it works** | The lifecycle: audit → distill → KB → provision → monitor → alert. Reuse the existing interactive diagram (`design/sentinel-lifecycle.html`). Can live as a landing section or its own page. | ◻︎ |
-| **Pricing** | Tiers per `docs/business-model.md` (one-off audit / monitoring retainer / enterprise). | ◻︎ |
+| **How it works** | The lifecycle: audit → distill → KB → provision → monitor → alert. Reuse the existing interactive diagram (`design/sentinel-lifecycle.html`). Can live as a landing section or its own page. | ✅ `design/sentinel-lifecycle.html` (reused) |
+| **Pricing** | Tiers per `docs/business-model.md` (one-off audit / monitoring retainer / enterprise). | ✅ `design/pricing.html` |
 | **Security & disclosure** | Credibility for a security product: never-mainnet, coordinated disclosure, sandboxed PoCs, data handling. | ⋯ |
 | Blog / changelog / about | — | ⋯ |
 
 ## Onboarding — the activation flow (product register)
 | Page | Purpose | Status |
 |---|---|---|
-| **Sign in / sign up** | Auth (email/SSO; optionally connect a Stacks address). Table-stakes, low design surface. | ◻︎ |
+| **Sign in / sign up** | Auth (email/SSO; optionally connect a Stacks address). Table-stakes, low design surface. | ✅ `design/sign-in.html` |
 | **First-run: onboard a contract** | The activation spine + the moat in motion: paste a contract id → Sentinel audits it → distills a candidate KB → you review/tune the Monitoring Plan → provision subscriptions → live. Multi-step. | ✅ `design/onboarding.html` |
 | **Empty states** | First-run Alerts/Contracts ("watching nothing yet, add your first contract"). Teach the interface. | ◻︎ (part of the app screens) |
 
@@ -29,14 +29,18 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 | **Contracts** | The watched set: per contract — archetype, monitoring status, subscription health, daily spend, last audit, open alerts. The app's landing view. | ✅ `design/contracts.html` |
 | **Contract detail + Monitoring Plan** | One contract's KB made tunable — the **moat screen**: sensitive fns + trigger classes, thresholds (audit-suggested → you promote), Type-2 signatures, accepted waivers, outflow baselines. Plus its alert + audit history. "Audit suggests, you tune." | ✅ `design/monitoring-plan.html` |
 | **Audit detail** | One audit run: findings (bug vs centralization, honestly labeled), the green-PoC artifact, metrics (cost / turns / latency), the report. The credibility surface. | ✅ `design/audit-detail.html` |
-| **Settings** | Notification routes/channels, daily spend ceiling, team, API keys / webhook secrets. | ◻︎ (lite) |
+| **Settings** | Notification routes/channels, daily spend ceiling, team, API keys / webhook secrets. | ✅ `design/settings.html` |
 | Audits (history list) | All audit runs across contracts. | ⋯ (or a tab on Contract detail) |
 | Alert detail (full page) | Deep single-alert investigation (finding, PoC, tx, timeline, disclosure). Inline expand covers MVP. | ⋯ |
 
-## MVP total: ~9 mockups (6 built → ~3 to go)
-Built: **Alerts**, **Landing**, **Monitoring Plan**, **Contracts**, **Audit detail**, **Onboarding first-run**.
-Remaining: Marketing (How-it-works, Pricing) · Onboarding (Sign-in) · Platform (Settings). How-it-works can
-largely reuse `design/sentinel-lifecycle.html`; Sign-in + Settings are low-surface.
+## MVP set COMPLETE — 9 screens + index gallery
+All built and self-contained: **Landing**, **Pricing**, **How-it-works** (reused lifecycle) · **Sign-in**,
+**Onboarding first-run** · **Contracts**, **Monitoring Plan**, **Alerts**, **Audit detail**, **Settings**.
+Click-through hub at `design/index.html`. One design system (docs/DESIGN.md), one voice (docs/PRODUCT.md),
+light + dark via `prefers-color-scheme`.
+
+Next up (post-MVP): a polish/critique pass across the set, then port to the real Vite + React + shadcn/ui
+stack (the tokens + structure are shadcn-idiomatic; `@babel/standalone` pin was prototype-only).
 
 ## Recommended mockup sequence
 1. **Landing** — the brand anchor. Flexes the brand register (bigger typographic moments, the hero, the

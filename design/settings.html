@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel · Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+<style>
+  :root{
+    --bg: oklch(0.99 0.003 60); --surface: oklch(0.976 0.004 60); --surface-2: oklch(0.985 0.004 60); --panel: oklch(0.966 0.004 60);
+    --border: oklch(0.912 0.005 60); --border-strong: oklch(0.86 0.006 60);
+    --ink: oklch(0.28 0.006 55); --ink-strong: oklch(0.18 0.006 55); --muted: oklch(0.60 0.006 55); --faint: oklch(0.72 0.005 55);
+    --accent: oklch(0.64 0.224 33); --accent-ink: oklch(0.99 0.01 60); --accent-weak: oklch(0.64 0.224 33 / 0.10);
+    --medium: oklch(0.70 0.15 66); --success: oklch(0.58 0.135 150); --success-weak: oklch(0.58 0.135 150 / 0.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.165 0.004 60); --surface: oklch(0.202 0.005 60); --surface-2: oklch(0.235 0.006 60); --panel: oklch(0.185 0.004 60);
+      --border: oklch(0.285 0.006 60); --border-strong: oklch(0.36 0.007 60);
+      --ink: oklch(0.925 0.004 60); --ink-strong: oklch(0.985 0.003 60); --muted: oklch(0.66 0.007 60); --faint: oklch(0.52 0.006 60);
+      --accent: oklch(0.685 0.2 36); --accent-ink: oklch(0.16 0.01 40); --accent-weak: oklch(0.685 0.2 36 / 0.17);
+      --medium: oklch(0.76 0.13 72); --success: oklch(0.70 0.13 152); --success-weak: oklch(0.70 0.13 152 / 0.16);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .mono{ font-family:"Geist Mono", ui-monospace, Menlo, monospace; font-feature-settings:"tnum" 1; }
+  h1,h2,h3{ color:var(--ink-strong); letter-spacing:-0.012em; margin:0; font-weight:600; }
+  button{ font:inherit; color:inherit; cursor:pointer; background:none; border:none; }
+  input{ font:inherit; }
+  .tnum{ font-variant-numeric:tabular-nums; }
+  ::-webkit-scrollbar{ width:11px; height:11px; } ::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:99px; border:3px solid var(--bg); }
+  [data-btn],[data-sw]{ transition:background .15s ease, border-color .15s ease, color .15s ease; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>window.addEventListener("error",(e)=>{window.__err=(e.error&&e.error.stack)||e.message;});</script>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+const I = {
+  logo:(p)=><svg viewBox="0 0 24 24" width="20" height="20" fill="none" {...p}><path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  alerts:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M12 3a5 5 0 00-5 5c0 4-1.5 5.5-2 6h14c-.5-.5-2-2-2-6a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M10 19a2 2 0 004 0" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  contracts:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M9 8h6M9 12h6M9 16h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  plan:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  audits:(p)=><svg viewBox="0 0 24 24" width="16" height="16" fill="none" {...p}><path d="M6 3h9l4 4v14H6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14 3v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M9 14l2 2 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  search:(p)=><svg viewBox="0 0 24 24" width="15" height="15" fill="none" {...p}><circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+};
+function Chip({children, tone="neutral"}){
+  const m={ neutral:["var(--surface-2)","var(--border)","var(--muted)"], accent:["var(--accent-weak)","transparent","var(--accent)"], success:["var(--success-weak)","transparent","var(--success)"], ghost:["transparent","var(--border)","var(--muted)"] }[tone];
+  return <span className="mono" style={{fontSize:11, fontWeight:500, padding:"2px 7px", borderRadius:6, background:m[0], border:`1px solid ${m[1]}`, color:m[2], display:"inline-flex", alignItems:"center", gap:5, whiteSpace:"nowrap"}}>{children}</span>;
+}
+function Btn({children, kind="ghost", onClick}){
+  const base={padding:"6px 12px", borderRadius:8, fontSize:13, fontWeight:500, border:"1px solid transparent", display:"inline-flex", alignItems:"center", gap:6};
+  const k={ primary:{background:"var(--accent)", color:"var(--accent-ink)"}, ghost:{background:"transparent", color:"var(--ink)", borderColor:"var(--border-strong)"}, quiet:{background:"transparent", color:"var(--muted)"} }[kind];
+  return <button data-btn onClick={onClick} style={{...base,...k}} onMouseEnter={e=>{if(kind==="ghost")e.currentTarget.style.background="var(--surface)";}} onMouseLeave={e=>{if(kind==="ghost")e.currentTarget.style.background="transparent";}}>{children}</button>;
+}
+function Toggle({on, onChange}){
+  return <button data-sw onClick={onChange} role="switch" aria-checked={on} style={{width:38, height:22, borderRadius:99, padding:2, background:on?"var(--accent)":"var(--border-strong)", display:"inline-flex", justifyContent:on?"flex-end":"flex-start", flexShrink:0}}>
+    <span style={{width:18, height:18, borderRadius:99, background:"var(--bg)", transition:"all .15s ease", boxShadow:"0 1px 2px oklch(0 0 0/.2)"}}/></button>;
+}
+function Section({title, note, action, children}){
+  return <section style={{marginBottom:30}}>
+    <div style={{display:"flex", alignItems:"baseline", gap:12, marginBottom:12}}>
+      <h2 style={{fontSize:15, fontWeight:600}}>{title}</h2>{note && <span style={{fontSize:12.5, color:"var(--muted)"}}>{note}</span>}
+      <span style={{flex:1}}/>{action}</div>
+    <div style={{border:"1px solid var(--border)", borderRadius:11, overflow:"hidden", background:"var(--surface-2)"}}>{children}</div>
+  </section>;
+}
+const ROW = {display:"grid", gridTemplateColumns:"1.4fr 1.5fr 0.9fr 60px", gap:14, alignItems:"center", padding:"13px 16px", background:"var(--bg)"};
+
+function Nav(){
+  const items=[["Alerts",I.alerts,false,4],["Contracts",I.contracts,false],["Monitoring Plan",I.plan,false],["Audits",I.audits,false]];
+  return <aside style={{width:236, flexShrink:0, background:"var(--panel)", borderRight:"1px solid var(--border)", display:"flex", flexDirection:"column", padding:"16px 12px"}}>
+    <div style={{display:"flex", alignItems:"center", gap:9, padding:"4px 8px 20px"}}><span style={{color:"var(--accent)"}}><I.logo/></span><span style={{fontWeight:600, fontSize:16, color:"var(--ink-strong)"}}>Sentinel</span></div>
+    <nav style={{display:"grid", gap:2}}>{items.map(([l,ic,act,b])=>(
+      <a key={l} data-btn href="#" onClick={e=>e.preventDefault()} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, fontSize:13.5, textDecoration:"none", fontWeight:act?500:450, color:act?"var(--ink-strong)":"var(--muted)", background:act?"var(--surface)":"transparent"}}
+        onMouseEnter={e=>{if(!act)e.currentTarget.style.background="var(--surface)";}} onMouseLeave={e=>{if(!act)e.currentTarget.style.background="transparent";}}>
+        <span style={{color:act?"var(--accent)":"var(--faint)", display:"inline-flex"}}>{ic()}</span>{l}<span style={{flex:1}}/>{b&&<span className="mono tnum" style={{fontSize:11, color:"var(--faint)"}}>{b}</span>}</a>))}</nav>
+    <div style={{flex:1}}/>
+    <a data-btn href="#" onClick={e=>e.preventDefault()} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, fontSize:13.5, textDecoration:"none", fontWeight:500, color:"var(--ink-strong)", background:"var(--surface)"}}>
+      <span style={{color:"var(--accent)"}}><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3.9a7 7 0 00-1.7-1l-.4-2.5H10l-.4 2.5a7 7 0 00-1.7 1l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2l-2 1.5 2 3.4 2.3-.9a7 7 0 001.7 1l.4 2.5h4l.4-2.5a7 7 0 001.7-1l2.3.9 2-3.4-2-1.5c.1-.3.1-.6.1-1z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg></span>Settings</a>
+  </aside>;
+}
+function TopBar(){
+  return <header style={{height:56, flexShrink:0, borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:16, padding:"0 24px"}}>
+    <button data-btn style={{display:"flex", alignItems:"center", gap:9, width:320, maxWidth:"36vw", padding:"7px 11px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--muted)", fontSize:13}}>
+      <I.search/><span style={{flex:1, textAlign:"left"}}>Search</span><span className="mono" style={{fontSize:11, border:"1px solid var(--border)", borderRadius:5, padding:"1px 5px", color:"var(--faint)"}}>⌘K</span></button>
+    <span style={{flex:1}}/>
+    <span style={{fontSize:12.5, color:"var(--muted)", display:"inline-flex", alignItems:"center", gap:7}}><span style={{width:7,height:7,borderRadius:99,background:"var(--success)"}}/>Watching <b style={{color:"var(--ink)",fontWeight:500}} className="tnum">3</b> contracts · <b style={{color:"var(--ink)",fontWeight:500}} className="tnum">9</b> functions</span>
+  </header>;
+}
+
+function Route({icon, name, dest, scope, on0}){
+  const [on,setOn]=useState(on0);
+  return <div style={ROW}>
+    <span style={{display:"flex", alignItems:"center", gap:9}}><span style={{color:"var(--muted)"}}>{icon}</span><span style={{fontWeight:500, color:"var(--ink-strong)"}}>{name}</span></span>
+    <span className="mono" style={{fontSize:12.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{dest}</span>
+    <span>{scope==="pages"?<Chip tone="accent">WARN pages</Chip>:<Chip tone="ghost">daily digest</Chip>}</span>
+    <span style={{display:"flex", justifyContent:"flex-end"}}><Toggle on={on} onChange={()=>setOn(v=>!v)}/></span>
+  </div>;
+}
+const chan = {
+  slack:<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9 9h6M9 12h6M9 15h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.4"/></svg>,
+  page:<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M12 3a5 5 0 00-5 5c0 4-1.5 5.5-2 6h14c-.5-.5-2-2-2-6a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.4"/></svg>,
+  mail:<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="1.4"/></svg>,
+  hook:<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M8 12a4 4 0 118 0M12 8v8M9 19h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
+};
+
+function App(){
+  const [reveal,setReveal]=useState(false);
+  return (
+    <div style={{display:"flex", height:"100vh", overflow:"hidden"}}>
+      <Nav/>
+      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0}}>
+        <TopBar/>
+        <main style={{flex:1, overflow:"auto"}}>
+          <div style={{maxWidth:800, margin:"0 auto", padding:"28px 24px 70px"}}>
+            <h1 style={{fontSize:24, marginBottom:4}}>Settings</h1>
+            <p style={{color:"var(--muted)", fontSize:13.5, marginTop:0, marginBottom:28}}>Where alerts go, what Sentinel is allowed to spend, and who has access.</p>
+
+            <Section title="Notification routes" note="alerts are human-gated; these decide where they land"
+              action={<Btn kind="ghost">Add route</Btn>}>
+              <div style={{display:"grid", gridTemplateColumns:"1.4fr 1.5fr 0.9fr 60px", gap:14, padding:"9px 16px", fontSize:11, textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--faint)", borderBottom:"1px solid var(--border)"}}>
+                <span>Channel</span><span>Destination</span><span>Scope</span><span style={{textAlign:"right"}}>On</span></div>
+              <Route icon={chan.page} name="PagerDuty" dest="security-oncall" scope="pages" on0={true}/>
+              <div style={{borderTop:"1px solid var(--border)"}}><Route icon={chan.slack} name="Slack" dest="#sentinel-alerts" scope="pages" on0={true}/></div>
+              <div style={{borderTop:"1px solid var(--border)"}}><Route icon={chan.mail} name="Email" dest="security@protocol.xyz" scope="digest" on0={true}/></div>
+              <div style={{borderTop:"1px solid var(--border)"}}><Route icon={chan.hook} name="Webhook" dest="https://ops.protocol.xyz/sentinel" scope="pages" on0={false}/></div>
+            </Section>
+
+            <Section title="Spend ceiling" note="a hard cap on audit + monitoring compute per day">
+              <div style={{padding:"18px 18px", background:"var(--bg)"}}>
+                <div style={{display:"flex", alignItems:"center", gap:14, flexWrap:"wrap"}}>
+                  <div style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", borderRadius:9, padding:"8px 12px", background:"var(--surface)"}}>
+                    <span className="mono" style={{color:"var(--faint)"}}>$</span><input defaultValue="50" style={{width:60, border:"none", outline:"none", background:"transparent", color:"var(--ink-strong)", fontWeight:500}} className="mono tnum"/><span style={{color:"var(--muted)", fontSize:13}}>/ day</span>
+                  </div>
+                  <span style={{fontSize:13, color:"var(--muted)"}}>Sentinel pauses new audits when the cap is hit. It never pauses monitoring.</span>
+                  <span style={{flex:1}}/><Btn kind="primary">Save</Btn>
+                </div>
+                <div style={{marginTop:16}}>
+                  <div style={{display:"flex", justifyContent:"space-between", fontSize:12.5, color:"var(--muted)", marginBottom:6}}><span>Today</span><span className="mono tnum"><b style={{color:"var(--ink)", fontWeight:500}}>$4.06</b> / $50</span></div>
+                  <div style={{height:7, borderRadius:99, background:"var(--surface-2)", overflow:"hidden"}}><div style={{width:"8%", height:"100%", background:"var(--accent)", borderRadius:99}}/></div>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Team" action={<Btn kind="ghost">Invite</Btn>}>
+              {[["Ryan Waits","ryan@protocol.xyz","Owner"],["A. Okafor","ada@protocol.xyz","Responder"],["security (bot)","svc-sentinel","Read-only"]].map((m,i)=>(
+                <div key={i} style={{display:"flex", alignItems:"center", gap:12, padding:"13px 16px", borderTop:i?"1px solid var(--border)":"none", background:"var(--bg)"}}>
+                  <span style={{width:28, height:28, borderRadius:99, background:"var(--accent-weak)", color:"var(--accent)", display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:600}}>{m[0][0]}</span>
+                  <span style={{fontWeight:500, color:"var(--ink-strong)"}}>{m[0]}</span>
+                  <span className="mono" style={{fontSize:12.5, color:"var(--muted)"}}>{m[1]}</span>
+                  <span style={{flex:1}}/><Chip tone={m[2]==="Owner"?"accent":"ghost"}>{m[2]}</Chip>
+                </div>))}
+            </Section>
+
+            <Section title="API & webhooks" note="the secondlayer signing secret and your API key">
+              <div style={{padding:"16px 18px", background:"var(--bg)", display:"grid", gap:16}}>
+                <div>
+                  <div style={{fontSize:12.5, color:"var(--muted)", marginBottom:7}}>secondlayer webhook signing secret</div>
+                  <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                    <span className="mono" style={{flex:1, fontSize:13, color:"var(--ink)", border:"1px solid var(--border)", borderRadius:8, padding:"9px 12px", background:"var(--surface)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{reveal?"whsec_7Jd2k9Qf3mX1pR8vLtBw0cZ":"whsec_•••••••••••••••••••••••"}</span>
+                    <Btn kind="ghost" onClick={()=>setReveal(r=>!r)}>{reveal?"Hide":"Reveal"}</Btn><Btn kind="quiet">Rotate</Btn>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:12.5, color:"var(--muted)", marginBottom:7}}>API key</div>
+                  <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                    <span className="mono" style={{flex:1, fontSize:13, color:"var(--ink)", border:"1px solid var(--border)", borderRadius:8, padding:"9px 12px", background:"var(--surface)"}}>sk_live_••••••••••••4a91</span>
+                    <Btn kind="ghost">Copy</Btn><Btn kind="quiet">Revoke</Btn>
+                  </div>
+                </div>
+              </div>
+            </Section>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
