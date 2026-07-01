@@ -4,15 +4,10 @@ import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom"
 import "./index.css"
 import { AppShell } from "@/components/app-shell"
 import AlertsPage from "@/routes/alerts"
-
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div className="mx-auto max-w-[960px] px-6 pt-7">
-      <h1 className="text-2xl font-semibold">{name}</h1>
-      <p className="mt-2 text-[13.5px] text-muted-foreground">Ported soon.</p>
-    </div>
-  )
-}
+import ContractsPage from "@/routes/contracts"
+import MonitoringPlanPage from "@/routes/monitoring-plan"
+import AuditDetailPage from "@/routes/audit-detail"
+import SettingsPage from "@/routes/settings"
 
 const router = createBrowserRouter([
   {
@@ -21,10 +16,10 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/alerts" replace /> },
       { path: "alerts", element: <AlertsPage /> },
-      { path: "contracts", element: <Placeholder name="Contracts" /> },
-      { path: "monitoring-plan", element: <Placeholder name="Monitoring Plan" /> },
-      { path: "audits", element: <Placeholder name="Audits" /> },
-      { path: "settings", element: <Placeholder name="Settings" /> },
+      { path: "contracts", element: <ContractsPage /> },
+      { path: "monitoring-plan", element: <MonitoringPlanPage /> },
+      { path: "audits", element: <AuditDetailPage /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
 ])

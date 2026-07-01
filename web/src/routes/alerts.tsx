@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Shield, Radar, ChevronRight, Check, X } from "lucide-react"
+import { Shield, Radar, ChevronRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Chip, SeverityDot } from "@/components/primitives"
 import { ALERTS, type Alert } from "@/lib/mock"
