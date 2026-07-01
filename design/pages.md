@@ -9,7 +9,7 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 ## Marketing — brand register (public, unauthenticated)
 | Page | Purpose | Status |
 |---|---|---|
-| **Landing / home** | The pitch: audit-informed security monitoring = Prevention + Detection. Hero, the two-pillar story, the moat ("your audit generates the monitoring"), a product peek, proof (the Zest socialize-debt finding + green PoC), CTA. | ◻︎ |
+| **Landing / home** | The pitch: audit-informed security monitoring = Prevention + Detection. Hero, the two-pillar story, the moat ("your audit generates the monitoring"), a product peek, proof (the Zest socialize-debt finding + green PoC), CTA. | ✅ `design/landing.html` |
 | **How it works** | The lifecycle: audit → distill → KB → provision → monitor → alert. Reuse the existing interactive diagram (`design/sentinel-lifecycle.html`). Can live as a landing section or its own page. | ◻︎ |
 | **Pricing** | Tiers per `docs/business-model.md` (one-off audit / monitoring retainer / enterprise). | ◻︎ |
 | **Security & disclosure** | Credibility for a security product: never-mainnet, coordinated disclosure, sandboxed PoCs, data handling. | ⋯ |
@@ -25,17 +25,17 @@ Status: ✅ built · ◻︎ MVP (this version) · ⋯ vNext.
 ## Platform — the control plane (product register, authenticated)
 | Page | Purpose | Status |
 |---|---|---|
-| **Alerts** | The WARN/INFO feed, Prevention + Detection lanes, human-gated actions. | ✅ |
+| **Alerts** | The WARN/INFO feed, Prevention + Detection lanes, human-gated actions. | ✅ `design/control-plane.html` |
 | **Contracts** | The watched set: per contract — archetype, monitoring status, subscription health, daily spend, last audit, open alerts. The app's landing view. | ◻︎ |
-| **Contract detail + Monitoring Plan** | One contract's KB made tunable — the **moat screen**: sensitive fns + trigger classes, thresholds (audit-suggested → you promote), Type-2 signatures, accepted waivers, outflow baselines. Plus its alert + audit history. "Audit suggests, you tune." | ◻︎ |
+| **Contract detail + Monitoring Plan** | One contract's KB made tunable — the **moat screen**: sensitive fns + trigger classes, thresholds (audit-suggested → you promote), Type-2 signatures, accepted waivers, outflow baselines. Plus its alert + audit history. "Audit suggests, you tune." | ✅ `design/monitoring-plan.html` |
 | **Audit detail** | One audit run: findings (bug vs centralization, honestly labeled), the green-PoC artifact, metrics (cost / turns / latency), the report. The credibility surface. | ◻︎ |
 | **Settings** | Notification routes/channels, daily spend ceiling, team, API keys / webhook secrets. | ◻︎ (lite) |
 | Audits (history list) | All audit runs across contracts. | ⋯ (or a tab on Contract detail) |
 | Alert detail (full page) | Deep single-alert investigation (finding, PoC, tx, timeline, disclosure). Inline expand covers MVP. | ⋯ |
 
-## MVP total: ~9 mockups (Alerts ✅ → 8 to go)
-Marketing: Landing, How-it-works, Pricing. Onboarding: Sign-in, First-run. Platform: Contracts, Contract
-detail + Monitoring Plan, Audit detail, Settings.
+## MVP total: ~9 mockups (3 built → ~6 to go)
+Built: **Alerts**, **Landing**, **Contract detail + Monitoring Plan**. Remaining: Marketing (How-it-works,
+Pricing) · Onboarding (Sign-in, First-run) · Platform (Contracts, Audit detail, Settings).
 
 ## Recommended mockup sequence
 1. **Landing** — the brand anchor. Flexes the brand register (bigger typographic moments, the hero, the
