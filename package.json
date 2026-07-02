@@ -11,6 +11,7 @@
     "audit": "bun run engine/run.ts",
     "distill": "bun run engine/distill.ts",
     "baseline": "bun run monitoring/baseline.ts",
+    "pox5:config": "bun run monitoring/pox5-bond-ops.ts",
     "lint": "biome check agent engine monitoring webhooks simnet subgraphs",
     "format": "biome check --write agent engine monitoring webhooks simnet subgraphs",
     "sandbox:build": "docker build -t audit-sentinel-simnet:local simnet",
