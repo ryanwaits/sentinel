@@ -38,11 +38,15 @@ export type DeliveryRecord = {
 
 /** Everything needed to create one chain subscription. Discriminated by `kind`:
  *  - contract_call: watch a privileged FUNCTION (Type-1 governance/upgrade + Type-2 counterparty).
+ *    `caller` narrows to (or, via a caller allowlist upstream, away from) a specific admin key.
+ *  - print_event: watch a specific `{ topic: ... }` print on the contract — the event-driven twin of
+ *    contract_call for contracts whose privileged actions announce a topic (e.g. pox-5 bond ops).
  *  - stx_outflow / ft_outflow: watch an ASSET LEAVING the contract (sender = contractId) — covers
  *    every outflow path, not just one fn (Type-2 transfer.outflow). ft_outflow narrows to one asset
  *    when `assetIdentifier` is set, else any FT from the sender. */
 export type SubSpec =
-  | { kind: "contract_call"; contractId: string; functionName: string }
+  | { kind: "contract_call"; contractId: string; functionName: string; caller?: string }
+  | { kind: "print_event"; contractId: string; topic: string }
   | { kind: "stx_outflow"; sender: string }
   | { kind: "ft_outflow"; sender: string; assetIdentifier?: string };
 export type CreateSubParams = { name: string; url: string } & SubSpec;
@@ -98,13 +102,19 @@ class SecondLayerTriggerSource implements TriggerSource {
     // assets LEAVING the watched contract.
     const t =
       params.kind === "contract_call"
-        ? trigger.contractCall({ contractId: params.contractId, functionName: params.functionName })
-        : params.kind === "stx_outflow"
-          ? trigger.stxTransfer({ sender: params.sender })
-          : trigger.ftTransfer({
-              sender: params.sender,
-              ...(params.assetIdentifier ? { assetIdentifier: params.assetIdentifier } : {}),
-            });
+        ? trigger.contractCall({
+            contractId: params.contractId,
+            functionName: params.functionName,
+            ...(params.caller ? { caller: params.caller } : {}),
+          })
+        : params.kind === "print_event"
+          ? trigger.printEvent({ contractId: params.contractId, topic: params.topic })
+          : params.kind === "stx_outflow"
+            ? trigger.stxTransfer({ sender: params.sender })
+            : trigger.ftTransfer({
+                sender: params.sender,
+                ...(params.assetIdentifier ? { assetIdentifier: params.assetIdentifier } : {}),
+              });
     const res = await this.#c().subscriptions.create({
       name: params.name,
       url: params.url,

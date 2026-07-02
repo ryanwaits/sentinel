@@ -32,6 +32,12 @@ export function ruleKeyForOutflow(contractId: string, asset: string): string {
   return `${NAME_PREFIX}${contractId}:outflow:${asset}`;
 }
 
+/** Key for a print-topic watch (one sub per contract+topic). Same `sentinel:<contract>:`
+ *  prefix — the `print:` segment keeps it disjoint from a same-named fn's contract_call key. */
+export function ruleKeyForPrint(contractId: string, topic: string): string {
+  return `${NAME_PREFIX}${contractId}:print:${topic}`;
+}
+
 /** One persisted subscription. `signingSecret` is a bare 64-char hex (Standard Webhooks). */
 export type SubRecord = {
   ruleKey: string;
