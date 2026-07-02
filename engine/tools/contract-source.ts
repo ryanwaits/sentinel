@@ -23,15 +23,24 @@ export const fetchContractSourceTool = tool(
         content: [
           {
             type: "text",
-            text: `ERROR: source fetch failed for ${contractId} (is STACKS_NODE_URL set?)`,
+            text: `ERROR: source fetch failed for ${contractId} (set STACKS_NODE_URL for a deployed contract, or SENTINEL_LOCAL_SOURCES to audit a pre-deployment .clar file)`,
           },
         ],
       };
     }
+    // Provenance banner: a `local` read is PRE-DEPLOYMENT / not chain-confirmed — the auditor must
+    // treat findings as reviewed against these exact bytes, and the report must say so.
+    const provenance =
+      root.origin === "local"
+        ? `;; SOURCE: LOCAL pre-deployment bytes${root.ref ? ` @ ${root.ref}` : ""} — NOT chain-confirmed\n`
+        : "";
     if (!closure) {
       return {
         content: [
-          { type: "text", text: `;; ${contractId} (${root.lineCount} lines)\n${root.source}` },
+          {
+            type: "text",
+            text: `${provenance};; ${contractId} (${root.lineCount} lines)\n${root.source}`,
+          },
         ],
       };
     }
