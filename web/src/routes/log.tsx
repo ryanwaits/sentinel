@@ -1,6 +1,7 @@
 import { useParams, useLocation, Link } from "react-router-dom"
-import { ShieldCheck, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { Chip } from "@/components/primitives"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { PanelHost, PanelLink, PanelBody, useReducedMotion, useWide } from "@/components/panel"
 import { usePanelStack, slugForItem, itemForSlug, type PanelItem } from "@/lib/panel-store"
 import { AUDIT_CASES, CASE_BY_ID } from "@/lib/audit"
@@ -93,7 +94,7 @@ function LogIndex() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[900px] items-center gap-3 px-6">
           <Link to="/" className="flex items-center gap-2 font-semibold text-ink-strong">
-            <ShieldCheck className="size-[21px] text-primary" strokeWidth={1.6} />
+            <SentinelMark className="size-[21px] text-ink-strong" />
             Sentinel
           </Link>
           <span className="flex-1" />
@@ -149,7 +150,7 @@ function Standalone({ slug }: { slug: string }) {
       <header className="border-b border-border">
         <div className="mx-auto flex h-16 max-w-[720px] items-center gap-3 px-6">
           <Link to="/" className="flex items-center gap-2 font-semibold text-ink-strong">
-            <ShieldCheck className="size-[21px] text-primary" strokeWidth={1.6} />
+            <SentinelMark className="size-[21px] text-ink-strong" />
             Sentinel
           </Link>
           <span className="flex-1" />

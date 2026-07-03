@@ -1,7 +1,8 @@
 import { Link } from "react-router"
-import { Mail, ShieldCheck, Wallet } from "lucide-react"
+import { Mail, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 function GoogleMark() {
@@ -43,7 +44,7 @@ export default function SignInPage() {
     <div className="grid min-h-screen grid-cols-1 md:grid-cols-2">
       <aside className="hidden flex-col border-r border-border bg-secondary p-11 md:flex">
         <Link to="/" className="flex items-center gap-2.5 text-[17px] font-semibold text-ink-strong">
-          <ShieldCheck className="size-[22px] text-primary" strokeWidth={1.6} />
+          <SentinelMark className="size-[22px] text-ink-strong" />
           Sentinel
         </Link>
 

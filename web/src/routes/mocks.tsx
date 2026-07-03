@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
-import { ShieldCheck, ArrowRight } from "lucide-react"
+import { ArrowRight } from "lucide-react"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type Item = { to: string; title: string; desc: string }
@@ -39,7 +40,7 @@ export default function MocksPage() {
   return (
     <div className="mx-auto max-w-[1000px] px-7 pb-20 pt-14">
       <div className="flex items-center gap-2.5 text-lg font-semibold text-ink-strong">
-        <ShieldCheck className="size-6 text-primary" strokeWidth={1.6} />
+        <SentinelMark className="size-6 text-ink-strong" />
         Sentinel
       </div>
       <h1 className="mt-[22px] text-3xl font-semibold tracking-tight">Screens</h1>

@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom"
 import {
-  Bell, ScrollText, SlidersHorizontal, ClipboardCheck, Settings, Search, ShieldCheck,
+  Bell, ScrollText, SlidersHorizontal, ClipboardCheck, Settings, Search,
   type LucideIcon,
 } from "lucide-react"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type NavDef = { to: string; label: string; icon: LucideIcon; badge?: number }
@@ -65,7 +66,7 @@ export function AppShell() {
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-[236px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3">
         <div className="flex items-center gap-2.5 px-2 pb-5 pt-1">
-          <ShieldCheck className="size-5 text-primary" strokeWidth={1.6} />
+          <SentinelMark className="size-5 text-ink-strong" />
           <span className="text-[16px] font-semibold text-ink-strong">Sentinel</span>
         </div>
         <nav className="grid gap-0.5">
@@ -92,6 +93,7 @@ export function AppShell() {
             </>
           )}
         </NavLink>
+        <p className="mt-3 px-2.5 text-[11.5px] text-faint">Powered by secondlayer</p>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />

@@ -1,19 +1,11 @@
 import { Link } from "react-router"
 import { ShieldCheck, Radar, ArrowRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 function Wrap({ className, children }: { className?: string; children: React.ReactNode }) {
   return <div className={cn("mx-auto w-full max-w-[1120px] px-7", className)}>{children}</div>
-}
-
-function ShieldMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-      <path d="M12 2l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V5l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
 }
 
 function Chip({ tone, children }: { tone: "critical" | "accent" | "success" | "neutral"; children: React.ReactNode }) {
@@ -75,7 +67,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <Wrap className="flex h-16 items-center gap-7">
           <a href="#" className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-0.01em] text-ink-strong">
-            <ShieldMark className="size-[21px] text-primary" />
+            <SentinelMark className="size-[21px] text-ink-strong" />
             Sentinel
           </a>
           <nav className="ml-2 hidden gap-6 md:flex">
@@ -116,7 +108,7 @@ export default function LandingPage() {
             <p className="mt-6 max-w-[56ch] text-[clamp(17px,1.7vw,20px)] leading-[1.5] text-muted-foreground">
               Sentinel audits your Stacks contracts with a multi-agent engine, reproduces the exploit in a sandbox, then
               monitors production for those exact findings. Prevention and detection, from one system. Every alert is
-              human-gated.
+              human-gated — a full deep sweep runs in minutes for about $2.
             </p>
             <div className="mt-[34px] flex flex-wrap items-center gap-3">
               <Button size="lg" render={<Link to="/onboarding" />}>
@@ -180,6 +172,18 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 font-mono text-[12.5px] text-muted-foreground">
+              <span>
+                <b className="font-medium text-ink-strong">1</b> live finding reproduced
+              </span>
+              <span>
+                <b className="font-medium text-ink-strong">15 / 15</b> PoC assertions green
+              </span>
+              <span>
+                <b className="font-medium text-ink-strong">~$2</b> per deep sweep
+              </span>
             </div>
           </Wrap>
         </section>
@@ -266,6 +270,12 @@ export default function LandingPage() {
                 </Chip>
                 <span className="font-mono text-[12.5px] text-muted-foreground">airgapped · deny-all egress</span>
               </div>
+              <Link
+                to="/pricing"
+                className="mt-4 inline-flex items-center gap-1.5 font-mono text-[12.5px] font-medium text-primary"
+              >
+                See what a sweep costs on your contract <ArrowRight className="size-3.5" />
+              </Link>
             </div>
 
             {/* TERMINAL */}
@@ -321,7 +331,7 @@ export default function LandingPage() {
       <footer className="border-t border-border py-10 text-[13.5px] text-muted-foreground">
         <Wrap className="flex flex-wrap items-center justify-between gap-5">
           <span className="flex items-center gap-2 text-[15px] font-semibold text-ink-strong">
-            <ShieldMark className="size-[18px] text-primary" />
+            <SentinelMark className="size-[18px] text-ink-strong" />
             Sentinel
           </span>
           <span>Audit-informed security monitoring for Stacks. Powered by secondlayer.</span>

@@ -1,6 +1,7 @@
 import { Link } from "react-router"
 import { Check, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type Tier = {
@@ -119,7 +120,7 @@ export default function PricingPage() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-6 px-7">
           <a href="#" className="flex items-center gap-2.5 text-[17px] font-semibold text-ink-strong">
-            <ShieldCheck className="size-5 text-primary" strokeWidth={1.6} />
+            <SentinelMark className="size-5 text-ink-strong" />
             Sentinel
           </a>
           <nav className="ml-2 hidden items-center gap-6 md:flex">
@@ -184,7 +185,7 @@ export default function PricingPage() {
       <footer className="mt-20 border-t border-border py-10 text-[13.5px] text-muted-foreground">
         <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-5 px-7">
           <span className="flex items-center gap-2 text-[15px] font-semibold text-ink-strong">
-            <ShieldCheck className="size-[18px] text-primary" strokeWidth={1.6} />
+            <SentinelMark className="size-[18px] text-ink-strong" />
             Sentinel
           </span>
           <span>Audit-informed security monitoring for Stacks. Powered by secondlayer.</span>
