@@ -33,6 +33,7 @@
   --color-ink: var(--foreground);
   --color-ink-strong: var(--ink-strong);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
@@ -76,6 +77,7 @@
   --faint: oklch(0.7 0.005 55);
   --ink-strong: oklch(0.18 0.006 55);
   --border: oklch(0.912 0.005 60);
+  --border-strong: oklch(0.86 0.006 60);
   --input: oklch(0.912 0.005 60);
   --ring: oklch(0.64 0.224 33);
 
@@ -113,6 +115,7 @@
     --faint: oklch(0.52 0.006 60);
     --ink-strong: oklch(0.985 0.003 60);
     --border: oklch(0.285 0.006 60);
+    --border-strong: oklch(0.36 0.007 60);
     --input: oklch(0.285 0.006 60);
     --ring: oklch(0.685 0.2 36);
 
