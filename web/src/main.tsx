@@ -8,6 +8,7 @@ import LandingPage from "@/routes/landing"
 import PricingPage from "@/routes/pricing"
 import SignInPage from "@/routes/sign-in"
 import OnboardingPage from "@/routes/onboarding"
+import LogPage from "@/routes/log"
 import MocksPage from "@/routes/mocks"
 import AlertsPage from "@/routes/alerts"
 import ContractsPage from "@/routes/contracts"
@@ -22,6 +23,8 @@ const router = createBrowserRouter([
   { path: "/pricing", element: <PricingPage /> },
   { path: "/sign-in", element: <SignInPage /> },
   { path: "/onboarding", element: <OnboardingPage /> },
+  { path: "/log", element: <LogPage /> },
+  { path: "/log/:id", element: <LogPage /> },
   { path: "/mocks", element: <MocksPage /> },
   // Authenticated app, wrapped in the sidebar + top-bar shell.
   {

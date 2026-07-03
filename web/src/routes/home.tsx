@@ -265,6 +265,9 @@ export default function HomePage() {
             Sentinel
           </Link>
           <span className="flex-1" />
+          <Link to="/log" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
+            Findings log
+          </Link>
           <Link to="/sign-in" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
             Sign in
           </Link>

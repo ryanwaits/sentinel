@@ -147,3 +147,19 @@
   }
   .tnum { font-variant-numeric: tabular-nums; }
 }
+
+/* The card stack is the only elevated surface: layered soft shadow, not one heavy drop. */
+.shadow-panel {
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 55 / 0.05),
+    0 8px 20px -6px oklch(0.2 0.02 55 / 0.1),
+    0 28px 56px -14px oklch(0.2 0.02 55 / 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  .shadow-panel {
+    box-shadow:
+      0 2px 8px oklch(0 0 0 / 0.5),
+      0 28px 60px -14px oklch(0 0 0 / 0.7);
+  }
+}
+
