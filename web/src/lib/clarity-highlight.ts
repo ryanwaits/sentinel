@@ -1,6 +1,4 @@
-import { createHighlighterCore, type HighlighterCore } from "shiki/core"
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
-import type { LanguageRegistration, ThemeRegistrationRaw } from "shiki/core"
+import type { HighlighterCore, LanguageRegistration, ThemeRegistrationRaw } from "shiki/core"
 
 // A minimal Clarity TextMate grammar: enough to color the core define-* forms,
 // builtins, types, constants, and comments. Not a full spec, deliberately small.
@@ -95,11 +93,14 @@ const dark: ThemeRegistrationRaw = {
 let hl: Promise<HighlighterCore> | null = null
 export function getHighlighter() {
   if (!hl) {
-    hl = createHighlighterCore({
-      themes: [light, dark],
-      langs: [clarity],
-      engine: createJavaScriptRegexEngine(),
-    })
+    // dynamic import: Shiki lands in its own chunk, off the initial bundle
+    hl = (async () => {
+      const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([
+        import("shiki/core"),
+        import("shiki/engine/javascript"),
+      ])
+      return createHighlighterCore({ themes: [light, dark], langs: [clarity], engine: createJavaScriptRegexEngine() })
+    })()
   }
   return hl
 }
