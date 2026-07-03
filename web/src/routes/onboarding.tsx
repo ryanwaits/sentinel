@@ -4,11 +4,11 @@ import { Shield, Check, Loader2, ArrowRight, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Chip } from "@/components/primitives"
+import { AuditPhases } from "@/components/audit"
 import { cn } from "@/lib/utils"
 
 type Candidate = { name: string; arch: string; tvl: string; risk: "high" | "medium" }
 type Tier = { k: string; title: string; blurb: string }
-type Phase = { label: string; status: "done" | "running" | "pending" }
 
 const CANDIDATES: Candidate[] = [
   { name: "v0-vault-sbtc", arch: "vault", tvl: "≈ 51 BTC", risk: "high" },
@@ -19,14 +19,6 @@ const CANDIDATES: Candidate[] = [
 const TIERS: Tier[] = [
   { k: "deep", title: "Deep", blurb: "Opus · full panel · ~$2 · minutes" },
   { k: "monitor", title: "Monitor", blurb: "Sonnet · fast · ~$0.40" },
-]
-
-const PHASES: Phase[] = [
-  { label: "Discover value and entrypoints", status: "done" },
-  { label: "Audit with 5 specialist subagents", status: "done" },
-  { label: "Adversarially verify each finding", status: "running" },
-  { label: "Reproduce in the airgapped sandbox", status: "pending" },
-  { label: "Distill the monitoring scope", status: "pending" },
 ]
 
 const STEPS = ["Add", "Audit", "Plan", "Live"] as const
@@ -160,31 +152,8 @@ function StepAudit({ onNext }: { onNext: () => void }) {
         it finds. This usually takes a few minutes.
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-border">
-        {PHASES.map((p, i) => (
-          <div
-            key={p.label}
-            className={cn(
-              "flex items-center gap-3 bg-background px-4 py-[13px]",
-              i > 0 && "border-t border-border",
-            )}
-          >
-            <span className="inline-flex w-5 justify-center">
-              {p.status === "done" ? (
-                <Check className="size-[15px] text-success" strokeWidth={2.4} />
-              ) : p.status === "running" ? (
-                <Loader2 className="size-[15px] animate-spin text-primary" />
-              ) : (
-                <span className="size-2 rounded-full bg-border" />
-              )}
-            </span>
-            <span className={cn("text-[13.5px]", p.status === "pending" ? "text-faint" : "text-foreground")}>
-              {p.label}
-            </span>
-            <span className="flex-1" />
-            {p.status === "running" && <span className="text-[12px] text-primary">running…</span>}
-          </div>
-        ))}
+      <div className="mt-6">
+        <AuditPhases activeStep={2} />
       </div>
 
       <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
