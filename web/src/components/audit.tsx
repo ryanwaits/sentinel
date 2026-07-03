@@ -199,13 +199,15 @@ export function RunMetrics({ run }: { run: AuditRun }) {
     [run.tokens, "tokens"],
   ]
   return (
-    <div className="flex overflow-hidden rounded-[11px] border border-border bg-secondary [&>*+*]:border-l [&>*+*]:border-border">
-      {items.map(([value, label]) => (
-        <div key={label} className="flex-1 px-[18px] py-3">
-          <div className="font-mono text-[16px] font-medium text-ink-strong tnum">{value}</div>
-          <div className="mt-0.5 text-[11.5px] text-muted-foreground">{label}</div>
-        </div>
-      ))}
+    <div className="overflow-x-auto rounded-[11px] border border-border bg-secondary">
+      <div className="flex min-w-full [&>*+*]:border-l [&>*+*]:border-border">
+        {items.map(([value, label]) => (
+          <div key={label} className="min-w-[84px] flex-1 px-[18px] py-3">
+            <div className="font-mono text-[16px] font-medium text-ink-strong tnum">{value}</div>
+            <div className="mt-0.5 text-[11.5px] text-muted-foreground">{label}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -36,9 +36,17 @@ export function usePanelNav() {
   const location = useLocation()
   const bg = (location.state?.background as string | undefined) ?? "/log"
 
-  const go = useCallback(
-    (item: PanelItem, replace: boolean) => {
-      navigate(`/log/${slugForItem(item)}`, { replace, state: { panel: true, background: bg } })
+  // Write the current stack to the URL: top card owns the path, and the FULL stack
+  // rides in history.state so back/forward restore exact stacks (even after cycling).
+  const sync = useCallback(
+    (replace: boolean) => {
+      const st = panel.get()
+      if (!st.length) {
+        navigate(bg, { replace })
+        return
+      }
+      const top = st[st.length - 1]
+      navigate(`/log/${slugForItem(top)}`, { replace, state: { panel: true, background: bg, stack: st } })
     },
     [navigate, bg],
   )
@@ -46,27 +54,23 @@ export function usePanelNav() {
   return {
     open(item: PanelItem) {
       panel.open(item)
-      go(item, false) // push: opening is a real route
+      sync(false) // push: opening is a real route (back closes it)
     },
     bringForward(item: PanelItem) {
       panel.open(item)
-      go(item, true)
+      sync(true)
     },
     cycle(dir: 1 | -1) {
       panel.cycle(dir)
-      const top = panel.get().at(-1)
-      if (top) go(top, true) // cycling = history.replace
+      sync(true) // cycling = history.replace
     },
     closeTop() {
-      // Pop explicitly (robust after cycling, where history was replaced), then
-      // rewrite the URL to the new top. Browser back still closes via the URL sync.
       panel.closeTop()
-      const top = panel.get().at(-1)
-      if (top) go(top, true)
-      else navigate(bg, { replace: true })
+      sync(true)
     },
     dismissAll() {
-      navigate(bg)
+      panel.clear()
+      sync(false)
     },
   }
 }
@@ -224,12 +228,13 @@ function cardLabel(item: PanelItem): { kind: string; name: string } {
 
 /* ---------- a single card ---------- */
 function PanelCard({
-  item, depth, isFront, count, onCycle, onClose, onBringForward,
+  item, depth, isFront, count, exiting, onCycle, onClose, onBringForward,
 }: {
   item: PanelItem
   depth: number
   isFront: boolean
   count: number
+  exiting: boolean
   onCycle: (d: 1 | -1) => void
   onClose: () => void
   onBringForward: () => void
@@ -250,16 +255,20 @@ function PanelCard({
 
   // move focus into the active card body when it becomes front
   useEffect(() => {
-    if (isFront && entered) bodyRef.current?.focus({ preventScroll: true })
-  }, [isFront, entered])
+    if (isFront && entered && !exiting) bodyRef.current?.focus({ preventScroll: true })
+  }, [isFront, entered, exiting])
 
   const resting = `translateX(${wide ? -PEEK * clamped : 0}px) scale(${1 - SCALE_STEP * clamped})`
-  const transform = entered ? resting : "translateX(calc(100% + 32px))"
+  const transform = exiting
+    ? "translateX(calc(100% + 40px))"
+    : entered
+      ? resting
+      : "translateX(calc(100% + 32px))"
 
   return (
     <div
       aria-hidden={!isFront}
-      onClick={!isFront ? onBringForward : undefined}
+      onClick={!isFront && !exiting ? onBringForward : undefined}
       className="pointer-events-auto absolute"
       style={{
         top: INSET,
@@ -272,6 +281,7 @@ function PanelCard({
         opacity: hidden ? 0 : 1,
         zIndex: 10 + depth * -1 + 100, // front (depth 0) highest
         cursor: isFront ? "default" : "pointer",
+        pointerEvents: exiting ? "none" : "auto",
       }}
     >
       <div className="shadow-panel flex h-full flex-col overflow-hidden rounded-[10px] border border-border bg-card">
@@ -323,25 +333,23 @@ export function PanelHost() {
   const n = stack.length
   const top = stack.at(-1)
 
-  // URL -> store reconcile (handles back/forward + hard nav)
+  // URL -> store reconcile. On back/forward the browser restores history.state,
+  // whose `stack` snapshot we replay verbatim. Guarded to panel routes so leaving
+  // (or a hard nav / standalone) never registers a ghost card.
   useEffect(() => {
     const path = location.pathname
-    if (!path.startsWith("/log")) {
+    const st = location.state as { panel?: boolean; stack?: PanelItem[] } | null
+    if (!path.startsWith("/log") || path === "/log" || !st?.panel) {
       panel.clear()
+      return
+    }
+    if (st.stack) {
+      panel.setStack(st.stack)
       return
     }
     const m = path.match(/^\/log\/(.+)$/)
-    if (!m || !location.state?.panel) {
-      panel.clear()
-      return
-    }
-    const item = itemForSlug(m[1])
-    const st = panel.get()
-    const idx = st.findIndex((s) => s.kind === item.kind && s.id === item.id)
-    if (idx === st.length - 1) return // already top
-    if (idx >= 0) panel.setStack(st.slice(0, idx + 1)) // back to a lower card
-    else panel.setStack([...st, item]) // restored a url whose card was dropped
-  }, [location.pathname, location.state])
+    if (m) panel.setStack([itemForSlug(m[1])])
+  }, [location.key, location.pathname, location.state])
 
   // keyboard: esc closes, arrows cycle (ignore while typing)
   useEffect(() => {
@@ -393,7 +401,22 @@ export function PanelHost() {
     if (!visible) el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" })
   }, [top, reduce])
 
-  if (!n) return null
+  // keep a just-closed card mounted briefly so it can slide out (no motion lib)
+  const [exiting, setExiting] = useState<PanelItem[]>([])
+  const prevRef = useRef<PanelItem[]>(stack)
+  useEffect(() => {
+    const prev = prevRef.current
+    prevRef.current = stack
+    const gone = prev.filter((p) => !stack.some((s) => s.kind === p.kind && s.id === p.id))
+    if (!gone.length) return
+    const isGone = (e: PanelItem) => gone.some((g) => g.kind === e.kind && g.id === e.id)
+    setExiting((cur) => [...cur.filter((e) => !isGone(e)), ...gone])
+    const t = setTimeout(() => setExiting((cur) => cur.filter((e) => !isGone(e))), reduce ? 0 : DUR + 40)
+    return () => clearTimeout(t)
+  }, [stack, reduce])
+
+  const exitingActive = exiting.filter((e) => !stack.some((s) => s.kind === e.kind && s.id === e.id))
+  if (!n && !exitingActive.length) return null
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[100]">
@@ -404,9 +427,23 @@ export function PanelHost() {
           depth={n - 1 - i}
           isFront={i === n - 1}
           count={n}
+          exiting={false}
           onCycle={(d) => nav.cycle(d)}
           onClose={() => nav.closeTop()}
           onBringForward={() => nav.bringForward(item)}
+        />
+      ))}
+      {exitingActive.map((item) => (
+        <PanelCard
+          key={`${item.kind}:${item.id}`}
+          item={item}
+          depth={0}
+          isFront={false}
+          count={n}
+          exiting={true}
+          onCycle={() => {}}
+          onClose={() => {}}
+          onBringForward={() => {}}
         />
       ))}
     </div>
