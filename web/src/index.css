@@ -163,3 +163,28 @@
   }
 }
 
+/* Shiki-highlighted Clarity: Geist Mono, transparent bg (sits on the card),
+   dual-theme flip for dark via prefers-color-scheme. */
+.clarity-code {
+  font-family: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+.clarity-code pre,
+.clarity-code .shiki {
+  margin: 0;
+  white-space: pre;
+  background: transparent !important;
+}
+.clarity-code code {
+  font-family: inherit;
+  background: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  .clarity-code .shiki,
+  .clarity-code .shiki span {
+    color: var(--shiki-dark) !important;
+  }
+}
+

@@ -48,6 +48,8 @@ export interface AuditCase {
   landLine: string
   /** honest one-line verdict summary */
   summary: string
+  /** the real Clarity source the audit runs on (a focused excerpt) */
+  code: string
   findings: Finding[]
   scope: ScopeItem[]
 }
@@ -68,6 +70,20 @@ export const AUDIT_CASES: AuditCase[] = [
     run: { tier: "deep", when: "4d ago", model: "Opus 4.8", cost: "$2.21", duration: "8m 24s", turns: 47, subagents: 5, tokens: "1.24M" },
     landLine: "socialize-debt: unbounded scaled-amount, no cap. reproducing…",
     summary: "1 confirmed bug (green PoC), 1 centralization (waived), 1 refuted and dropped",
+    code: `;; v0-vault-sbtc  ·  the audited function
+(define-data-var total-scaled uint u0)
+
+(define-public (socialize-debt (scaled-amount uint))
+  (begin
+    ;; caller must be an authorized market
+    (try! (is-authorized-market contract-caller))
+    ;; no cap, no attested loss  <- the finding
+    (var-set total-scaled
+      (- (var-get total-scaled) scaled-amount))
+    (ok (var-get total-scaled))))
+
+(define-read-only (get-total-assets)
+  (var-get total-scaled))`,
     findings: [
       {
         id: "F1",
@@ -128,6 +144,16 @@ export const AUDIT_CASES: AuditCase[] = [
     run: { tier: "deep", when: "6d ago", model: "Opus 4.8", cost: "$1.64", duration: "6m 02s", turns: 39, subagents: 5, tokens: "0.94M" },
     landLine: "no unbounded or unauthorized withdrawal path. learning baseline from 300 transfers…",
     summary: "No exploitable bug, 2 centralization notes (by design)",
+    code: `;; dlmm-pool-stx-usdcx  ·  admin surface
+(define-data-var fee-bps uint u30)
+
+(define-public (set-fee (new-bps uint))
+  (begin
+    ;; trust-gated, not a bug: bounded by a max
+    (try! (is-dao-or-owner))
+    (asserts! (<= new-bps u100) ERR-FEE-TOO-HIGH)
+    (var-set fee-bps new-bps)
+    (ok new-bps)))`,
     findings: [
       {
         id: "F1",
@@ -164,6 +190,15 @@ export const AUDIT_CASES: AuditCase[] = [
     run: { tier: "deep", when: "3d ago", model: "Opus 4.8", cost: "$1.88", duration: "7m 10s", turns: 44, subagents: 5, tokens: "1.08M" },
     landLine: "execute() runs any passed proposal. checking proposal gating…",
     summary: "1 centralization finding (a trust assumption, not a code bug)",
+    code: `;; ccd002-treasury  ·  proposal execution
+(define-public (execute
+    (proposal <proposal-trait>)
+    (sender principal))
+  (begin
+    (try! (is-approved proposal))
+    ;; runs whatever governance passed
+    (as-contract
+      (contract-call? proposal execute sender))))`,
     findings: [
       {
         id: "F1",

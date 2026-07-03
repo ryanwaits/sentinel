@@ -4,6 +4,7 @@ import { ShieldCheck, Play, Check, Loader2, ArrowRight, RotateCcw } from "lucide
 import { Button } from "@/components/ui/button"
 import { Chip } from "@/components/primitives"
 import { AuditPhases, FindingList, MonitoringScope, RunMetrics } from "@/components/audit"
+import { CodeBlock } from "@/components/code-block"
 import { AUDIT_CASES, AUDIT_PHASES, type AuditCase } from "@/lib/audit"
 import { cn } from "@/lib/utils"
 
@@ -155,18 +156,24 @@ function InlineAuditCard() {
         )}
 
         {phase === "idle" && (
-          <div className="flex min-h-[280px] flex-col items-start justify-center gap-5 p-6">
-            <div>
-              <p className="max-w-[46ch] text-[14.5px] text-foreground">
-                Run the actual audit engine on <span className="font-mono text-ink-strong">{selected.contract.name}</span>.
-                Deep tier, five subagents, adversarial verification, sandbox reproduction. It resolves to a real finding
-                and the monitoring scope it would watch.
-              </p>
-              <p className="mt-2 font-mono text-[12px] text-faint">{selected.contract.principal}</p>
+          <div className="p-4">
+            <div className="overflow-hidden rounded-lg border border-border bg-secondary/50">
+              <div className="flex items-center gap-2 border-b border-border px-3.5 py-2 font-mono text-[11px] text-faint">
+                <span className="size-2 rounded-full bg-border-strong" />
+                {selected.contract.name}.clar
+              </div>
+              <div className="px-4 py-3.5">
+                <CodeBlock code={selected.code} />
+              </div>
             </div>
-            <Button size="lg" onClick={run} className="gap-2">
-              <Play className="size-4 fill-current" /> Run audit
-            </Button>
+            <div className="mt-3.5 flex items-center justify-between gap-3">
+              <p className="max-w-[32ch] text-[12px] text-muted-foreground">
+                Deep tier. Five subagents, adversarial verification, sandbox reproduction.
+              </p>
+              <Button size="lg" onClick={run} className="shrink-0 gap-2">
+                <Play className="size-4 fill-current" /> Run audit
+              </Button>
+            </div>
           </div>
         )}
 
