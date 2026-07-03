@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { Link } from "react-router"
-import { Shield, Check, Loader2, ArrowRight, ArrowLeft } from "lucide-react"
+import { Link, useSearchParams } from "react-router-dom"
+import { Check, Loader2, ArrowRight, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Chip } from "@/components/primitives"
 import { AuditPhases } from "@/components/audit"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type Candidate = { name: string; arch: string; tvl: string; risk: "high" | "medium" }
@@ -56,9 +57,28 @@ function Stepper({ step }: { step: number }) {
   )
 }
 
-function StepAdd({ onNext }: { onNext: () => void }) {
+function StepAdd({ onNext }: { onNext: (contract: string, email: string) => void }) {
+  const [searchParams] = useSearchParams()
   const [sel, setSel] = useState("v0-vault-sbtc")
   const [tier, setTier] = useState("deep")
+  const [contractId, setContractId] = useState(searchParams.get("contract") ?? "")
+  const [email, setEmail] = useState("")
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const activeContract = contractId.trim() || sel
+  // Contract names are short; pasted principals ("SP….contract-name") are long — show just the
+  // name so the submit button never forces the row to wrap word-by-word.
+  const displayContract = activeContract.includes(".") ? activeContract.split(".").pop() : activeContract
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+
+  function submit() {
+    if (!emailValid) {
+      setEmailError("Enter a valid email — we'll send the report there.")
+      return
+    }
+    setEmailError(null)
+    onNext(activeContract, email)
+  }
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
       <h1 className="text-2xl font-semibold">What should Sentinel watch?</h1>
@@ -70,6 +90,8 @@ function StepAdd({ onNext }: { onNext: () => void }) {
       <div className="mt-6 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
         <span className="font-mono text-[13px] text-faint">SP…</span>
         <Input
+          value={contractId}
+          onChange={(e) => setContractId(e.target.value)}
           placeholder="paste a contract principal.name"
           className="h-6 border-0 bg-transparent px-0 font-mono text-[13.5px] focus-visible:ring-0"
         />
@@ -130,9 +152,30 @@ function StepAdd({ onNext }: { onNext: () => void }) {
         })}
       </div>
 
-      <div className="mt-[30px] flex justify-end">
-        <Button size="lg" onClick={onNext}>
-          Audit and watch {sel}
+      <div className="mt-[26px] mb-2.5 font-mono text-[11px] uppercase tracking-wider text-faint">
+        Where should we send the report?
+      </div>
+      <Input
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => {
+          setEmail(e.target.value)
+          if (emailError) setEmailError(null)
+        }}
+        placeholder="you@protocol.xyz"
+        aria-invalid={!!emailError}
+        className={cn("h-11 font-mono text-[13.5px]", emailError && "border-destructive")}
+      />
+      {emailError && <p className="mt-2 text-[12.5px] text-destructive">{emailError}</p>}
+
+      <div className="mt-[22px] flex flex-wrap items-center justify-between gap-3">
+        <span className="min-w-0 flex-1 text-[12.5px] text-faint">
+          A real audit takes minutes. We'll email you when it's done.
+        </span>
+        <Button size="lg" onClick={submit} className="shrink-0">
+          Audit and watch {displayContract}
           <ArrowRight />
         </Button>
       </div>
@@ -140,11 +183,11 @@ function StepAdd({ onNext }: { onNext: () => void }) {
   )
 }
 
-function StepAudit({ onNext }: { onNext: () => void }) {
+function StepAudit({ contract, onNext }: { contract: string; onNext: () => void }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
       <div className="flex items-center gap-2.5">
-        <h1 className="text-[22px] font-semibold">Auditing v0-vault-sbtc</h1>
+        <h1 className="truncate text-[22px] font-semibold">Auditing {contract}</h1>
         <Chip tone="accent">deep</Chip>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
@@ -238,7 +281,7 @@ function StepPlan({ onNext, onBack }: { onNext: () => void; onBack: () => void }
   )
 }
 
-function StepLive({ onRestart }: { onRestart: () => void }) {
+function StepLive({ contract, onRestart }: { contract: string; onRestart: () => void }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-1 pt-3.5 text-center duration-200">
       <div className="mx-auto mb-5 inline-flex size-14 items-center justify-center rounded-full bg-success-weak text-success">
@@ -246,7 +289,7 @@ function StepLive({ onRestart }: { onRestart: () => void }) {
       </div>
       <h1 className="text-2xl font-semibold">Monitoring is live</h1>
       <p className="mx-auto mt-2.5 max-w-[52ch] text-[14.5px] text-muted-foreground">
-        Sentinel is watching <b className="font-medium text-foreground">v0-vault-sbtc</b> across{" "}
+        Sentinel is watching <b className="font-medium text-foreground">{contract}</b> across{" "}
         <b className="font-medium text-foreground">9 subscriptions</b>. You'll be paged when a proposal
         enters the timelock, or an outflow breaks the baseline. Nothing acts without you.
       </p>
@@ -264,10 +307,11 @@ function StepLive({ onRestart }: { onRestart: () => void }) {
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0)
+  const [contract, setContract] = useState("v0-vault-sbtc")
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="flex items-center gap-2.5 border-b border-border px-7 py-5">
-        <Shield className="size-[22px] text-primary" strokeWidth={1.6} />
+        <SentinelMark className="size-[22px] text-ink-strong" />
         <span className="text-base font-semibold text-ink-strong">Sentinel</span>
         <span className="flex-1" />
         <span className="text-[12.5px] text-muted-foreground">Set up monitoring</span>
@@ -275,10 +319,17 @@ export default function OnboardingPage() {
       <main className="flex flex-1 justify-center px-6 py-12">
         <div className="w-full max-w-[660px]">
           <Stepper step={step} />
-          {step === 0 && <StepAdd onNext={() => setStep(1)} />}
-          {step === 1 && <StepAudit onNext={() => setStep(2)} />}
+          {step === 0 && (
+            <StepAdd
+              onNext={(c) => {
+                setContract(c)
+                setStep(1)
+              }}
+            />
+          )}
+          {step === 1 && <StepAudit contract={contract} onNext={() => setStep(2)} />}
           {step === 2 && <StepPlan onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-          {step === 3 && <StepLive onRestart={() => setStep(0)} />}
+          {step === 3 && <StepLive contract={contract} onRestart={() => setStep(0)} />}
         </div>
       </main>
     </div>

@@ -4,8 +4,12 @@ import { ShieldCheck, Play, Check, Loader2, ArrowRight, RotateCcw } from "lucide
 import { Button } from "@/components/ui/button"
 import { Chip } from "@/components/primitives"
 import { AuditPhases, FindingList, MonitoringScope, RunMetrics } from "@/components/audit"
+import { ScanTeaser } from "@/components/scan-teaser"
+import { SentinelMark } from "@/components/sentinel-mark"
 import { CodeBlock } from "@/components/code-block"
 import { AUDIT_CASES, AUDIT_PHASES, type AuditCase } from "@/lib/audit"
+import { runScan, type ScanResult } from "@/lib/scan"
+import { isValidContractId } from "@/lib/stacks-id"
 import { cn } from "@/lib/utils"
 
 type Phase = "idle" | "running" | "done"
@@ -84,7 +88,60 @@ function BetaCapture() {
   )
 }
 
-/* ---------- right column: the audit demo, shaped like the inline detail card ---------- */
+/* ---------- hero right column: a static peek at live alerts ---------- */
+function AlertsPeek() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_oklch(0.2_0.02_55/0.04),0_12px_32px_-10px_oklch(0.2_0.02_55/0.14)]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary px-4 py-[11px]">
+        <span className="size-[9px] rounded-full bg-destructive" />
+        <span className="size-[9px] rounded-full bg-primary" />
+        <span className="size-[9px] rounded-full bg-faint" />
+        <span className="ml-2 font-mono text-[12px] text-muted-foreground">sentinel · alerts</span>
+        <span className="flex-1" />
+        <span className="hidden font-mono text-[11.5px] text-faint sm:inline">watching 3 contracts · 9 functions</span>
+      </div>
+      <div className="py-1.5">
+        <div className="flex gap-3 border-b border-border px-4 py-[15px] sm:px-5">
+          <span className="mt-[5px] size-[9px] shrink-0 rounded-full bg-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <b className="font-medium text-ink-strong">Incoming proposal would drain the treasury</b>
+              <span className="font-mono text-[12px] text-muted-foreground">ccd002-treasury · execute</span>
+            </div>
+            <div className="mt-[9px] flex flex-wrap items-center gap-1.5">
+              <Chip tone="critical">CRITICAL</Chip>
+              <Chip tone="neutral">● bug</Chip>
+              <Chip tone="success">
+                <Check className="size-3" /> PoC green
+              </Chip>
+              <span className="flex-1" />
+              <span className="font-mono text-[12px] font-medium text-primary tnum">veto: 6 blocks left · ≈58 min</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 px-4 py-[15px] sm:px-5">
+          <span className="mt-[5px] size-[9px] shrink-0 rounded-full bg-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <b className="font-medium text-ink-strong">Possible exploitation: socialize-debt unbounded LP loss</b>
+              <span className="font-mono text-[12px] text-muted-foreground">v0-vault-sbtc</span>
+            </div>
+            <div className="mt-[9px] flex flex-wrap items-center gap-1.5">
+              <Chip tone="accent">HIGH</Chip>
+              <Chip tone="accent">correlation</Chip>
+              <Chip tone="success">
+                <Check className="size-3" /> PoC green
+              </Chip>
+              <Chip tone="neutral">conf 0.60</Chip>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------- playground: the real audit engine, run inline ---------- */
 function InlineAuditCard() {
   const [selected, setSelected] = useState<AuditCase>(AUDIT_CASES[0])
   const [phase, setPhase] = useState<Phase>("idle")
@@ -219,6 +276,105 @@ function InlineAuditCard() {
   )
 }
 
+/* ---------- playground: paste a real contract, get a real (zero-LLM, static) scan ---------- */
+function ScanPanel() {
+  const [value, setValue] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<ScanResult | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const contractId = value.trim()
+    if (!isValidContractId(contractId)) {
+      setError("Expected SP…/ST….contract-name")
+      return
+    }
+    setError(null)
+    setLoading(true)
+    setResult(null)
+    try {
+      setResult(await runScan(contractId))
+    } catch {
+      setResult({ contractId, status: "error", lineCount: 0, signals: [] })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="shadow-panel flex min-h-[440px] flex-col overflow-hidden rounded-[10px] border border-border bg-card lg:max-h-[calc(100dvh-150px)]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.05em] text-muted-foreground">
+        <span className="text-ink-strong">scan</span>
+        <span className="truncate text-faint">/ paste any Stacks contract</span>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4">
+        <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value)
+              if (error) setError(null)
+            }}
+            placeholder="SP….contract-name"
+            className={cn(
+              "h-10 min-w-0 flex-1 rounded-lg border bg-card px-3 font-mono text-[13px] text-foreground outline-none transition-colors placeholder:text-faint",
+              error ? "border-destructive" : "border-border focus-visible:border-primary",
+            )}
+          />
+          <Button type="submit" size="lg" className="h-10 shrink-0 gap-2" disabled={loading}>
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
+            Scan
+          </Button>
+        </form>
+        {error && <p className="mt-2 text-[12px] text-destructive">{error}</p>}
+
+        <div className="mt-4">
+          {loading && (
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              <Loader2 className="size-4 animate-spin text-primary" /> Resolving contract on Stacks…
+            </div>
+          )}
+          {!loading && result && <ScanTeaser result={result} />}
+          {!loading && !result && (
+            <p className="text-[13px] text-muted-foreground">
+              Paste a live Stacks contract address. Sentinel reads the real on-chain source and flags
+              value-transfer, admin, and access-control surface — in seconds, no full audit run yet.
+            </p>
+          )}
+        </div>
+
+        {result?.status === "ok" && (
+          <Button
+            size="lg"
+            className="mt-5 w-full gap-2"
+            render={<Link to={`/onboarding?contract=${encodeURIComponent(result.contractId)}`} />}
+          >
+            Continue to the full audit <ArrowRight className="size-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Playground() {
+  const [mode, setMode] = useState<"scan" | "example">("scan")
+  return (
+    <div className="min-w-0">
+      {mode === "scan" ? <ScanPanel /> : <InlineAuditCard />}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === "scan" ? "example" : "scan"))}
+        className="mt-3 font-mono text-[12px] text-muted-foreground transition-colors hover:text-ink-strong"
+      >
+        {mode === "scan" ? "or see a finished example →" : "← back to scan your own contract"}
+      </button>
+    </div>
+  )
+}
+
 /* ---------- page ---------- */
 export default function HomePage() {
   return (
@@ -226,16 +382,21 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-3 px-6">
           <Link to="/" className="flex items-center gap-2 font-semibold text-ink-strong">
-            <ShieldCheck className="size-[21px] text-primary" strokeWidth={1.6} />
+            <SentinelMark className="size-[21px] text-ink-strong" />
             Sentinel
           </Link>
           <span className="flex-1" />
-          <Link to="/log" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
-            Findings log
-          </Link>
-          <Link to="/sign-in" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
-            Sign in
-          </Link>
+          <nav className="hidden items-center gap-5 sm:flex">
+            <Link to="/log" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
+              Findings log
+            </Link>
+            <Link to="/pricing" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
+              Pricing
+            </Link>
+            <Link to="/sign-in" className="text-[14px] text-muted-foreground transition-colors hover:text-ink-strong">
+              Sign in
+            </Link>
+          </nav>
           <Button size="sm" nativeButton={false} render={<a href="#access" />}>
             Get early access
           </Button>
@@ -246,15 +407,12 @@ export default function HomePage() {
         <div className="grid items-start gap-10 pt-14 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
           {/* left: tagline + beta access */}
           <div className="lg:pt-8">
-            <p className="font-mono text-[12.5px] font-medium tracking-wide text-primary">
-              Audit-informed security monitoring · Stacks
-            </p>
+            <p className="font-mono text-[12.5px] font-medium tracking-wide text-primary">Stacks · Clarity · Bitcoin L2</p>
             <h1 className="mt-4 text-[clamp(30px,4.2vw,50px)] font-semibold leading-[1.06] tracking-tight text-ink-strong">
-              See what an audit finds. Then watch for it.
+              Bitcoin L2 Smart Contract Auditing & Monitoring
             </h1>
             <p className="mt-4 max-w-[48ch] text-[clamp(15px,1.5vw,17px)] leading-relaxed text-muted-foreground">
-              Not a pitch deck. Run the actual engine on a real Stacks contract, right here. Prevention and detection,
-              from one audit.
+              Your audit becomes the monitoring plan — sensitive functions, thresholds, alerts.
             </p>
             <div className="mt-9">
               <BetaCapture />
@@ -268,16 +426,60 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* right: the audit demo, shaped like the inline detail card */}
+          {/* right: a static peek at what a live alert looks like */}
           <div className="lg:pt-2">
-            <InlineAuditCard />
+            <AlertsPeek />
+            <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 font-mono text-[12.5px] text-muted-foreground">
+              <span>
+                <b className="font-medium text-ink-strong">1</b> live finding reproduced
+              </span>
+              <span>
+                <b className="font-medium text-ink-strong">15 / 15</b> PoC assertions green
+              </span>
+              <span>
+                <b className="font-medium text-ink-strong">~$2</b> per deep sweep
+              </span>
+            </div>
             <p className="mt-4 px-0.5 text-[12px] leading-relaxed text-faint">
-              A full deep sweep costs about two dollars in compute. Monitoring is scoped by what it finds. Powered by{" "}
-              <span className="text-muted-foreground">secondlayer</span>.
+              Powered by <span className="text-muted-foreground">secondlayer</span>.{" "}
+              <Link to="/pricing" className="font-medium text-primary hover:underline">
+                See pricing →
+              </Link>
             </p>
           </div>
         </div>
+
+        {/* PLAYGROUND — the real audit engine, run inline. Mirrored from the hero: card left, text right. */}
+        <div className="mt-20 border-t border-border pt-16">
+          <div className="grid min-w-0 items-start gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-16">
+            <div className="min-w-0 lg:order-1">
+              <Playground />
+            </div>
+            <div className="min-w-0 lg:order-2 lg:pt-2">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-faint">Try it — a real scan</p>
+              <h2 className="mt-3 text-[clamp(22px,2.6vw,32px)] font-semibold tracking-tight text-ink-strong">
+                Paste a real Stacks contract. Get a real read.
+              </h2>
+              <p className="mt-3 max-w-[42ch] text-[14.5px] leading-relaxed text-muted-foreground">
+                Not a mockup. Sentinel fetches the actual on-chain source and flags real surface area in seconds.
+                Like what you see — continue into the full multi-agent audit: five subagents, adversarial
+                verification, sandbox reproduction.
+              </p>
+            </div>
+          </div>
+        </div>
       </main>
+
+      <footer className="border-t border-border py-10 text-[13.5px] text-muted-foreground">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-5 px-6">
+          <span className="flex items-center gap-2 text-[15px] font-semibold text-ink-strong">
+            <SentinelMark className="size-[18px] text-ink-strong" />
+            Sentinel
+          </span>
+          <span>Audit-informed security monitoring for Stacks. Powered by secondlayer.</span>
+          <span className="font-mono text-faint">© 2026</span>
+        </div>
+      </footer>
     </div>
   )
 }
