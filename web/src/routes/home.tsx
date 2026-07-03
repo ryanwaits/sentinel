@@ -219,7 +219,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1140px] items-center gap-3 px-6">
+        <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-3 px-6">
           <Link to="/" className="flex items-center gap-2 font-semibold text-ink-strong">
             <ShieldCheck className="size-[21px] text-primary" strokeWidth={1.6} />
             Sentinel
@@ -237,8 +237,8 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1140px] px-6 pb-24">
-        <div className="grid items-start gap-10 pt-14 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14">
+      <main className="mx-auto max-w-[1280px] px-6 pb-24">
+        <div className="grid items-start gap-10 pt-14 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
           {/* left: tagline + beta access */}
           <div className="lg:pt-8">
             <p className="font-mono text-[12.5px] font-medium tracking-wide text-primary">

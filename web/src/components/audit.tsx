@@ -198,11 +198,14 @@ export function RunMetrics({ run }: { run: AuditRun }) {
     [run.subagents, "subagents"],
     [run.tokens, "tokens"],
   ]
+  // Container queries: adapt to the CARD's width, not the viewport. 2 cols on a
+  // phone-width card, 3 in the hero card, 6 across on the full audit page. Hairline
+  // dividers via a 1px gap over a border-colored track. Never scrolls horizontally.
   return (
-    <div className="overflow-x-auto rounded-[11px] border border-border bg-secondary">
-      <div className="flex min-w-full [&>*+*]:border-l [&>*+*]:border-border">
+    <div className="@container">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[11px] border border-border bg-border @[520px]:grid-cols-3 @[840px]:grid-cols-6">
         {items.map(([value, label]) => (
-          <div key={label} className="min-w-[84px] flex-1 px-[18px] py-3">
+          <div key={label} className="bg-secondary px-[16px] py-3">
             <div className="font-mono text-[16px] font-medium text-ink-strong tnum">{value}</div>
             <div className="mt-0.5 text-[11.5px] text-muted-foreground">{label}</div>
           </div>
