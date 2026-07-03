@@ -71,8 +71,6 @@ export const AUDIT_CASES: AuditCase[] = [
     landLine: "socialize-debt: unbounded scaled-amount, no cap. reproducing…",
     summary: "1 confirmed bug (green PoC), 1 centralization (waived), 1 refuted and dropped",
     code: `;; v0-vault-sbtc  ·  the audited function
-(define-data-var total-scaled uint u0)
-
 (define-public (socialize-debt (scaled-amount uint))
   (begin
     ;; caller must be an authorized market
@@ -80,10 +78,7 @@ export const AUDIT_CASES: AuditCase[] = [
     ;; no cap, no attested loss  <- the finding
     (var-set total-scaled
       (- (var-get total-scaled) scaled-amount))
-    (ok (var-get total-scaled))))
-
-(define-read-only (get-total-assets)
-  (var-get total-scaled))`,
+    (ok (var-get total-scaled))))`,
     findings: [
       {
         id: "F1",

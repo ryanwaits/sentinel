@@ -116,7 +116,7 @@ function InlineAuditCard() {
   }
 
   return (
-    <div className="shadow-panel flex max-h-[min(72vh,660px)] flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+    <div className="shadow-panel flex min-h-[440px] flex-col overflow-hidden rounded-[10px] border border-border bg-card lg:max-h-[calc(100dvh-150px)]">
       {/* chrome, matching the /log detail card */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.05em] text-muted-foreground">
         <span className="text-ink-strong">audit</span>
@@ -156,17 +156,15 @@ function InlineAuditCard() {
         )}
 
         {phase === "idle" && (
-          <div className="p-4">
-            <div className="overflow-hidden rounded-lg border border-border bg-secondary/50">
-              <div className="flex items-center gap-2 border-b border-border px-3.5 py-2 font-mono text-[11px] text-faint">
+          <div className="flex flex-col gap-3.5 p-4">
+            <div className="overflow-x-auto rounded-lg border border-border bg-secondary/50 px-4 py-3.5">
+              <div className="mb-2.5 flex items-center gap-2 font-mono text-[11px] text-faint">
                 <span className="size-2 rounded-full bg-border-strong" />
                 {selected.contract.name}.clar
               </div>
-              <div className="px-4 py-3.5">
-                <CodeBlock code={selected.code} />
-              </div>
+              <CodeBlock code={selected.code} />
             </div>
-            <div className="mt-3.5 flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <p className="max-w-[32ch] text-[12px] text-muted-foreground">
                 Deep tier. Five subagents, adversarial verification, sandbox reproduction.
               </p>
