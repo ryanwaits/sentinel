@@ -271,13 +271,12 @@ export default function HomePage() {
           {/* right: the audit demo, shaped like the inline detail card */}
           <div className="lg:pt-2">
             <InlineAuditCard />
+            <p className="mt-4 px-0.5 text-[12px] leading-relaxed text-faint">
+              A full deep sweep costs about two dollars in compute. Monitoring is scoped by what it finds. Powered by{" "}
+              <span className="text-muted-foreground">secondlayer</span>.
+            </p>
           </div>
         </div>
-
-        <p className="mt-14 max-w-[560px] text-[12.5px] text-faint">
-          A full deep sweep costs about two dollars in compute. Monitoring is scoped by what it finds. Powered by
-          secondlayer.
-        </p>
       </main>
     </div>
   )
