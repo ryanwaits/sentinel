@@ -6,6 +6,7 @@ import { CASE_BY_ID, type Finding } from "@/lib/audit"
 import {
   panel, usePanelStack, slugForItem, itemForSlug, type PanelItem,
 } from "@/lib/panel-store"
+import { EASE, DUR } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 
 const INSET = 16
@@ -13,8 +14,6 @@ const CARD_W = 620
 const PEEK = 18
 const SCALE_STEP = 0.025
 const MAX_DEPTH = 3
-const EASE = "cubic-bezier(0.22, 1, 0.36, 1)"
-const DUR = 340
 
 /* ---------- media hooks ---------- */
 function useMedia(query: string) {
@@ -271,12 +270,11 @@ function PanelCard({
       onClick={!isFront && !exiting ? onBringForward : undefined}
       className="pointer-events-auto absolute"
       style={{
-        top: INSET,
         bottom: INSET,
         right: INSET,
         width: `min(${CARD_W}px, calc(100vw - 20px))`,
         transform,
-        transformOrigin: "right center",
+        transformOrigin: "right bottom",
         transition: reduce ? "none" : `transform ${DUR}ms ${EASE}, opacity ${DUR}ms ${EASE}`,
         opacity: hidden ? 0 : 1,
         zIndex: 10 + depth * -1 + 100, // front (depth 0) highest
@@ -284,7 +282,10 @@ function PanelCard({
         pointerEvents: exiting ? "none" : "auto",
       }}
     >
-      <div className="shadow-panel flex h-full flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+      <div
+        className="shadow-panel flex min-h-[280px] flex-col overflow-hidden rounded-[10px] border border-border bg-card"
+        style={{ maxHeight: `calc(100dvh - ${INSET * 2}px)` }}
+      >
         {/* chrome */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.05em] text-muted-foreground">
           <span className="text-ink-strong">{kind}</span>
