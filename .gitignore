@@ -21,3 +21,6 @@ simnet/history.json
 
 # account-personal project binding
 .secondlayer/
+
+# vercel project link
+.vercel/
