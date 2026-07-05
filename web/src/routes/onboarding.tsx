@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Chip } from "@/components/primitives"
 import { AuditPhases } from "@/components/audit"
-import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type Candidate = { name: string; arch: string; tvl: string; risk: "high" | "medium" }
@@ -18,7 +17,7 @@ const CANDIDATES: Candidate[] = [
 ]
 
 const TIERS: Tier[] = [
-  { k: "deep", title: "Deep", blurb: "Opus · full panel · ~$2 · minutes" },
+  { k: "deep", title: "Deep", blurb: "Opus · full panel · $99 · minutes" },
   { k: "monitor", title: "Monitor", blurb: "Sonnet · fast · ~$0.40" },
 ]
 
@@ -80,7 +79,7 @@ function StepAdd({ onNext }: { onNext: (contract: string, email: string) => void
   }
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+    <div>
       <h1 className="text-2xl font-semibold">What should Sentinel watch?</h1>
       <p className="mt-2 text-[14.5px] text-muted-foreground">
         Paste a Clarity contract, or pick one we ranked by value and risk. Sentinel audits it, then
@@ -185,7 +184,7 @@ function StepAdd({ onNext }: { onNext: (contract: string, email: string) => void
 
 function StepAudit({ contract, onNext }: { contract: string; onNext: () => void }) {
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+    <div>
       <div className="flex items-center gap-2.5">
         <h1 className="truncate text-[22px] font-semibold">Auditing {contract}</h1>
         <Chip tone="accent">deep</Chip>
@@ -226,7 +225,7 @@ function StepAudit({ contract, onNext }: { contract: string; onNext: () => void 
 
 function StepPlan({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+    <div>
       <h1 className="text-[23px] font-semibold">Sentinel found 1 bug and drafted your scope</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         This is what monitoring will watch, derived from the audit. Go live now with sensible
@@ -283,7 +282,7 @@ function StepPlan({ onNext, onBack }: { onNext: () => void; onBack: () => void }
 
 function StepLive({ contract, onRestart }: { contract: string; onRestart: () => void }) {
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-1 pt-3.5 text-center duration-200">
+    <div className="pt-3.5 text-center">
       <div className="mx-auto mb-5 inline-flex size-14 items-center justify-center rounded-full bg-success-weak text-success">
         <Check className="size-7" strokeWidth={2.4} />
       </div>
@@ -309,29 +308,21 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [contract, setContract] = useState("v0-vault-sbtc")
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="flex items-center gap-2.5 border-b border-border px-7 py-5">
-        <SentinelMark className="size-[22px] text-ink-strong" />
-        <span className="text-base font-semibold text-ink-strong">Sentinel</span>
-        <span className="flex-1" />
-        <span className="text-[12.5px] text-muted-foreground">Set up monitoring</span>
-      </header>
-      <main className="flex flex-1 justify-center px-6 py-12">
-        <div className="w-full max-w-[660px]">
-          <Stepper step={step} />
-          {step === 0 && (
-            <StepAdd
-              onNext={(c) => {
-                setContract(c)
-                setStep(1)
-              }}
-            />
-          )}
-          {step === 1 && <StepAudit contract={contract} onNext={() => setStep(2)} />}
-          {step === 2 && <StepPlan onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-          {step === 3 && <StepLive contract={contract} onRestart={() => setStep(0)} />}
-        </div>
-      </main>
-    </div>
+    <main className="flex flex-1 justify-center px-6 py-12">
+      <div className="w-full max-w-[660px]">
+        <Stepper step={step} />
+        {step === 0 && (
+          <StepAdd
+            onNext={(c) => {
+              setContract(c)
+              setStep(1)
+            }}
+          />
+        )}
+        {step === 1 && <StepAudit contract={contract} onNext={() => setStep(2)} />}
+        {step === 2 && <StepPlan onNext={() => setStep(3)} onBack={() => setStep(1)} />}
+        {step === 3 && <StepLive contract={contract} onRestart={() => setStep(0)} />}
+      </div>
+    </main>
   )
 }

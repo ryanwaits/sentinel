@@ -54,6 +54,8 @@
 /* Warp-derived tokens (docs/DESIGN.md). Light = :root, dark = prefers-color-scheme (no toggle). */
 :root {
   --radius: 0.625rem;
+  /* secondlayer's own brand blue, for the co-brand mark only — never used for our UI */
+  --secondlayer-blue: #2563eb;
 
   --background: oklch(0.99 0.003 60);
   --foreground: oklch(0.28 0.006 55);
@@ -93,40 +95,42 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.165 0.004 60);
-    --foreground: oklch(0.925 0.004 60);
-    --card: oklch(0.202 0.005 60);
-    --card-foreground: oklch(0.925 0.004 60);
-    --popover: oklch(0.235 0.006 60);
-    --popover-foreground: oklch(0.925 0.004 60);
-    --primary: oklch(0.685 0.2 36);
-    --primary-foreground: oklch(0.16 0.01 40);
-    --primary-weak: oklch(0.685 0.2 36 / 0.17);
-    --secondary: oklch(0.235 0.006 60);
-    --secondary-foreground: oklch(0.985 0.003 60);
-    --muted: oklch(0.235 0.006 60);
-    --muted-foreground: oklch(0.66 0.007 60);
-    --accent: oklch(0.235 0.006 60);
-    --accent-foreground: oklch(0.985 0.003 60);
-    --destructive: oklch(0.64 0.2 28);
-    --success: oklch(0.7 0.13 152);
-    --success-weak: oklch(0.7 0.13 152 / 0.16);
+    --secondlayer-blue: #8aa7f8;
+    /* Soft Charcoal — lifted off near-black for easier sustained reading; same warm hue family */
+    --background: oklch(0.225 0.006 58);
+    --foreground: oklch(0.93 0.004 58);
+    --card: oklch(0.262 0.007 58);
+    --card-foreground: oklch(0.93 0.004 58);
+    --popover: oklch(0.294 0.008 58);
+    --popover-foreground: oklch(0.93 0.004 58);
+    --primary: oklch(0.685 0.19 36);
+    --primary-foreground: oklch(0.18 0.01 40);
+    --primary-weak: oklch(0.685 0.19 36 / 0.17);
+    --secondary: oklch(0.294 0.008 58);
+    --secondary-foreground: oklch(0.99 0.003 58);
+    --muted: oklch(0.294 0.008 58);
+    --muted-foreground: oklch(0.68 0.007 58);
+    --accent: oklch(0.294 0.008 58);
+    --accent-foreground: oklch(0.99 0.003 58);
+    --destructive: oklch(0.64 0.19 28);
+    --success: oklch(0.7 0.12 152);
+    --success-weak: oklch(0.7 0.12 152 / 0.16);
     --warning: oklch(0.76 0.13 72);
-    --faint: oklch(0.52 0.006 60);
-    --ink-strong: oklch(0.985 0.003 60);
-    --border: oklch(0.285 0.006 60);
-    --border-strong: oklch(0.36 0.007 60);
-    --input: oklch(0.285 0.006 60);
-    --ring: oklch(0.685 0.2 36);
+    --faint: oklch(0.55 0.006 58);
+    --ink-strong: oklch(0.99 0.003 58);
+    --border: oklch(0.362 0.008 58);
+    --border-strong: oklch(0.43 0.009 58);
+    --input: oklch(0.362 0.008 58);
+    --ring: oklch(0.685 0.19 36);
 
-    --sidebar: oklch(0.185 0.004 60);
-    --sidebar-foreground: oklch(0.66 0.007 60);
-    --sidebar-primary: oklch(0.685 0.2 36);
-    --sidebar-primary-foreground: oklch(0.16 0.01 40);
-    --sidebar-accent: oklch(0.202 0.005 60);
-    --sidebar-accent-foreground: oklch(0.985 0.003 60);
-    --sidebar-border: oklch(0.285 0.006 60);
-    --sidebar-ring: oklch(0.685 0.2 36);
+    --sidebar: oklch(0.245 0.006 58);
+    --sidebar-foreground: oklch(0.68 0.007 58);
+    --sidebar-primary: oklch(0.685 0.19 36);
+    --sidebar-primary-foreground: oklch(0.18 0.01 40);
+    --sidebar-accent: oklch(0.262 0.007 58);
+    --sidebar-accent-foreground: oklch(0.99 0.003 58);
+    --sidebar-border: oklch(0.362 0.008 58);
+    --sidebar-ring: oklch(0.685 0.19 36);
   }
 }
 
@@ -146,6 +150,10 @@
     letter-spacing: -0.012em;
   }
   .tnum { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in { animation-duration: 1ms !important; animation-delay: 0ms !important; }
 }
 
 /* The card stack is the only elevated surface: layered soft shadow, not one heavy drop. */
