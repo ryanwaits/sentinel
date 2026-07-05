@@ -1,7 +1,6 @@
-import { Link } from "react-router"
+import { Link } from "react-router-dom"
 import { Check, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { SentinelMark } from "@/components/sentinel-mark"
 import { cn } from "@/lib/utils"
 
 type Tier = {
@@ -19,9 +18,9 @@ const TIERS: Tier[] = [
   {
     name: "Audit",
     blurb: "On-demand, pre-launch or on-upgrade.",
-    price: "$5",
+    price: "$99",
     unit: " / deep sweep",
-    note: "$0.40 for a fast Monitor-tier sweep.",
+    note: "Delivered in minutes, not weeks.",
     features: [
       "Multi-agent deep audit, model-tiered",
       "Adversarial verification of every finding",
@@ -63,41 +62,34 @@ const TIERS: Tier[] = [
   },
 ]
 
-const NAV = [
-  { label: "How it works", active: false },
-  { label: "Proof", active: false },
-  { label: "Pricing", active: true },
-  { label: "Docs", active: false },
-]
-
 function TierCard({ tier }: { tier: Tier }) {
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-2xl border p-7",
+        "relative flex flex-col rounded-2xl border p-6",
         tier.reco
           ? "border-primary bg-background shadow-lg shadow-primary/5"
           : "border-border bg-card",
       )}
     >
       {tier.reco && (
-        <span className="absolute -top-3 left-7 rounded-md bg-primary px-2.5 py-[3px] font-mono text-[11px] font-medium tracking-wide text-primary-foreground">
+        <span className="absolute -top-3 left-6 rounded-md bg-primary px-2.5 py-[3px] font-mono text-[11px] font-medium tracking-wide text-primary-foreground">
           Recommended
         </span>
       )}
-      <h3 className="text-[19px] font-semibold">{tier.name}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">{tier.blurb}</p>
-      <div className="mb-1 mt-4">
-        <span className="text-[38px] font-semibold tracking-tight text-ink-strong tnum">
+      <h3 className="text-[18px] font-semibold">{tier.name}</h3>
+      <p className="mt-1.5 text-[13.5px] text-muted-foreground">{tier.blurb}</p>
+      <div className="mb-1 mt-3.5">
+        <span className="text-[34px] font-semibold tracking-tight text-ink-strong tnum">
           {tier.price}
         </span>
-        {tier.unit && <span className="text-[15px] text-muted-foreground">{tier.unit}</span>}
+        {tier.unit && <span className="text-[14.5px] text-muted-foreground">{tier.unit}</span>}
       </div>
-      <p className="m-0 text-[13px] text-faint">{tier.note}</p>
-      <ul className="my-6 grid flex-1 gap-3">
+      <p className="m-0 text-[12.5px] text-faint">{tier.note}</p>
+      <ul className="my-5 grid flex-1 gap-2.5">
         {tier.features.map((f) => (
-          <li key={f} className="flex gap-2.5 text-[14.5px] leading-snug text-foreground">
-            <Check className="mt-[3px] size-[15px] shrink-0 text-success" strokeWidth={2.25} />
+          <li key={f} className="flex gap-2.5 text-[13.5px] leading-snug text-foreground">
+            <Check className="mt-[3px] size-[14px] shrink-0 text-success" strokeWidth={2.25} />
             {f}
           </li>
         ))}
@@ -116,60 +108,30 @@ function TierCard({ tier }: { tier: Tier }) {
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-6 px-7">
-          <a href="#" className="flex items-center gap-2.5 text-[17px] font-semibold text-ink-strong">
-            <SentinelMark className="size-5 text-ink-strong" />
-            Sentinel
-          </a>
-          <nav className="ml-2 hidden items-center gap-6 md:flex">
-            {NAV.map((n) => (
-              <a
-                key={n.label}
-                href="#"
-                className={cn(
-                  "text-[14.5px] transition-colors hover:text-ink-strong",
-                  n.active ? "text-ink-strong" : "text-muted-foreground",
-                )}
-              >
-                {n.label}
-              </a>
-            ))}
-          </nav>
-          <span className="flex-1" />
-          <a href="#" className="hidden text-[14.5px] text-muted-foreground hover:text-ink-strong md:inline">
-            Log in
-          </a>
-          <Button size="lg" render={<Link to="/onboarding" />}>
-            Get a demo
-          </Button>
-        </div>
-      </header>
-
-      <main>
-        <section className="pt-[clamp(56px,8vw,100px)]">
-          <div className="mx-auto max-w-[1120px] px-7 text-center">
+    <>
+      <main className="flex flex-1 flex-col justify-center">
+        <section className="py-6">
+          <div className="mx-auto max-w-[1280px] px-6 text-center">
             <p className="font-mono text-[12.5px] font-medium tracking-wide text-primary">Pricing</p>
-            <h1 className="mx-auto mt-4 max-w-[16ch] text-[clamp(34px,5vw,56px)] font-semibold leading-[1.08]">
+            <h1 className="mx-auto mt-3 max-w-[16ch] text-[clamp(28px,4vw,44px)] font-semibold leading-[1.1]">
               Priced like software, not like an audit firm.
             </h1>
-            <p className="mx-auto mt-5 max-w-[56ch] text-[clamp(16px,1.6vw,19px)] text-muted-foreground">
-              A full deep sweep costs us about two dollars in compute, and we don't mark that up a
-              thousand times. Audit on demand. Pay monthly to keep watching.
+            <p className="mx-auto mt-4 max-w-[56ch] text-[clamp(15px,1.4vw,17px)] text-muted-foreground">
+              A deep sweep runs in minutes, not weeks — five subagents, adversarially verified, the
+              exploit reproduced before it ships. Audit on demand. Pay monthly to keep watching.
             </p>
           </div>
 
-          <div className="mx-auto max-w-[1120px] px-7">
-            <div className="mt-[52px] grid items-start gap-[18px] md:grid-cols-3">
+          <div className="mx-auto max-w-[1280px] px-6">
+            <div className="mt-7 grid items-start gap-[18px] md:grid-cols-3">
               {TIERS.map((tier) => (
                 <TierCard key={tier.name} tier={tier} />
               ))}
             </div>
 
-            <div className="mt-[44px] flex flex-wrap items-center gap-4 rounded-xl border border-border bg-secondary px-6 py-[22px]">
+            <div className="mt-6 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-secondary px-6 py-3.5">
               <ShieldCheck className="size-5 text-primary" strokeWidth={1.5} />
-              <p className="m-0 min-w-[280px] flex-1 text-[14.5px] text-foreground">
+              <p className="m-0 min-w-[280px] flex-1 text-[14px] text-foreground">
                 Every plan is human-gated and coordinated-disclosure first. Sentinel never runs an
                 exploit against mainnet, and never discloses before a fix. That stance is not an
                 upsell, it is how the product works.
@@ -181,17 +143,6 @@ export default function PricingPage() {
           </div>
         </section>
       </main>
-
-      <footer className="mt-20 border-t border-border py-10 text-[13.5px] text-muted-foreground">
-        <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-5 px-7">
-          <span className="flex items-center gap-2 text-[15px] font-semibold text-ink-strong">
-            <SentinelMark className="size-[18px] text-ink-strong" />
-            Sentinel
-          </span>
-          <span>Audit-informed security monitoring for Stacks. Powered by secondlayer.</span>
-          <span className="font-mono text-faint tnum">© 2026</span>
-        </div>
-      </footer>
-    </div>
+    </>
   )
 }
