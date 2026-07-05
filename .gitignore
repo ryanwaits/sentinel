@@ -3,6 +3,7 @@ node_modules/
 .env.local
 .env
 *.log
+*.tsbuildinfo
 
 # simnet runtime artifacts
 simnet/.cache/
