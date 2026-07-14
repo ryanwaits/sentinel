@@ -7,7 +7,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.195",
         "@secondlayer/sdk": "^6.25.1",
-        "@secondlayer/stacks": "^2.5.2",
+        "@secondlayer/stacks": "^2.11.0",
         "@secondlayer/subgraphs": "^3.16.0",
         "@stacks/clarinet-sdk": "^3.20.0",
         "zod": "^4.4.3",
@@ -90,7 +90,7 @@
 
     "@secondlayer/shared": ["@secondlayer/shared@6.37.0", "", { "dependencies": { "@secondlayer/stacks": "^2.5.2", "kysely": "0.28.15", "kysely-postgres-js": "3.0.0", "postgres": "^3.4.6", "zod": "^4.3.6" } }, "sha512-tI243rISx4jufxVunA1qtPLTmfa2yvFRwC6hxVbxt2BHl2EGnO1iFM3O35kZXkLt+hgX9ydK3Q3ucz4F4N+Hdw=="],
 
-    "@secondlayer/stacks": ["@secondlayer/stacks@2.5.2", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-cwecN7S/lbDKYYvKy8jLXD1W25jld+qoQayfgNnnP3X10QU6CR409hIQfepF27q2CTPvx8YmyQnYYXksbn/5tg=="],
+    "@secondlayer/stacks": ["@secondlayer/stacks@2.11.0", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-vICwWutKjJd2zaVhilVmn5qOzsIvsYND2UcQSUzgNKRSA8QSVR/3ayWXPPlwvCd+P/nYaD72ttsSaDTTKxC38Q=="],
 
     "@secondlayer/subgraphs": ["@secondlayer/subgraphs@3.16.0", "", { "dependencies": { "@secondlayer/shared": "^6.37.0", "@secondlayer/stacks": "^2.3.0", "kysely": "0.28.15", "zod": "^4.3.6" } }, "sha512-CN3dY7e7KkvyT2zpEIGbaD94ippPp6e7iyu7MGZAqxQWIttkhGbGWLsZATTI3tkpAXKw8ei0989pwkFW8nVv8g=="],
 
@@ -365,6 +365,12 @@
     "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
+
+    "@secondlayer/sdk/@secondlayer/stacks": ["@secondlayer/stacks@2.5.2", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-cwecN7S/lbDKYYvKy8jLXD1W25jld+qoQayfgNnnP3X10QU6CR409hIQfepF27q2CTPvx8YmyQnYYXksbn/5tg=="],
+
+    "@secondlayer/shared/@secondlayer/stacks": ["@secondlayer/stacks@2.5.2", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-cwecN7S/lbDKYYvKy8jLXD1W25jld+qoQayfgNnnP3X10QU6CR409hIQfepF27q2CTPvx8YmyQnYYXksbn/5tg=="],
+
+    "@secondlayer/subgraphs/@secondlayer/stacks": ["@secondlayer/stacks@2.5.2", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-cwecN7S/lbDKYYvKy8jLXD1W25jld+qoQayfgNnnP3X10QU6CR409hIQfepF27q2CTPvx8YmyQnYYXksbn/5tg=="],
 
     "@stacks/transactions/@noble/hashes": ["@noble/hashes@1.1.5", "", {}, "sha512-LTMZiiLc+V4v1Yi16TD6aX2gmtKszNye0pQgbaLqkvhIqP7nVsSaJsWloGQjJfJ8offaoP5GtX3yY5swbcJxxQ=="],
 

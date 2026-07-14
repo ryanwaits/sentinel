@@ -8,7 +8,7 @@
         "@base-ui/react": "^1.6.0",
         "@fontsource-variable/geist": "^5.2.9",
         "@fontsource-variable/geist-mono": "^5.2.8",
-        "@secondlayer/stacks": "^2.5.2",
+        "@secondlayer/stacks": "^2.11.0",
         "@tailwindcss/vite": "^4.3.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -236,7 +236,7 @@
 
     "@sec-ant/readable-stream": ["@sec-ant/readable-stream@0.4.1", "", {}, "sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg=="],
 
-    "@secondlayer/stacks": ["@secondlayer/stacks@2.10.0", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-OwczN2hyoiay2PP16E423POqYF/8KMvcfVyT34sUnRTQmgiI0KKtw5wXENsTRTeomoJVDLK54RxJ38Y14QliyA=="],
+    "@secondlayer/stacks": ["@secondlayer/stacks@2.11.0", "", { "dependencies": { "@noble/ciphers": "2.1.1", "@noble/curves": "2.0.1", "@noble/hashes": "2.0.1", "@noble/secp256k1": "2.3.0", "@scure/bip32": "2.0.1", "@scure/bip39": "2.0.1", "ai": "6.0.167", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5" } }, "sha512-vICwWutKjJd2zaVhilVmn5qOzsIvsYND2UcQSUzgNKRSA8QSVR/3ayWXPPlwvCd+P/nYaD72ttsSaDTTKxC38Q=="],
 
     "@shikijs/core": ["@shikijs/core@4.3.1", "", { "dependencies": { "@shikijs/primitive": "4.3.1", "@shikijs/types": "4.3.1", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-ANMDxuaPsNMdDC1m4vfvhlDmJweMwkE5XitTwrq2rWHx5jM+dlm4MmHt2PP6t0uejfR77SuhrhJ0zEijIF/uhA=="],
 

@@ -24,7 +24,7 @@ Commit messages extremely concise. **No `Co-Authored-By` trailer.**
 
 ## Powered-by-secondlayer (hard rule)
 - Depend ONLY on PUBLISHED `@secondlayer/*` — never workspace/internal.
-  Pinned: `@secondlayer/sdk@^6.25.1`, `@secondlayer/stacks@^2.5.2`,
+  Pinned: `@secondlayer/sdk@^6.25.1`, `@secondlayer/stacks@^2.11.0`,
   `@secondlayer/subgraphs@^3.16.0`.
 - Clarity values via `@secondlayer/stacks/clarity` (`Cl`), NOT `@stacks/transactions`.
 - All on-chain data via secondlayer SDK / hosted Index / Subgraphs / Streams /
