@@ -32,6 +32,9 @@ services:
       # bind mounts resolve on the HOST daemon, this path MUST be identical on host and in the worker
       # (see the volumes mount below) — otherwise the host can't find the file.
       - SENTINEL_SANDBOX_HOSTDIR=/tmp/sentinel-sandbox
+      # Dev only: SENTINEL_AUDIT_MOCK=1 makes POST /audit return a canned verdict (no Opus spend) so the
+      # web onboarding wiring is testable end-to-end. Leave UNSET in prod (real audit runs).
+      - SENTINEL_AUDIT_MOCK=${SENTINEL_AUDIT_MOCK:-}
     volumes:
       # Docker-out-of-Docker: run the airgapped `docker run --network none` PoC sandbox on the host daemon.
       - /var/run/docker.sock:/var/run/docker.sock

@@ -18,7 +18,15 @@
  * Env: SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret); ANTHROPIC_API_KEY + STACKS_NODE_URL
  *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
+import { type Adjudication, adjudicateFindings } from "../monitoring/adjudication";
 import { type AuditRequest, runAuditRequest, runTrigger } from "../monitoring/audit-pipeline";
+import {
+  getAuditStatus,
+  setAuditDone,
+  setAuditError,
+  setAuditRunning,
+  toPublicResult,
+} from "../monitoring/audit-results";
 import { routeForTriggerClass } from "../monitoring/config";
 import { buildDirective, tierFor } from "../monitoring/directive";
 import { triageTrigger } from "../monitoring/incident-triage";
@@ -345,47 +353,101 @@ export async function handle(req: Request): Promise<Response> {
   return new Response("queued", { status: 202 });
 }
 
+// The front door is a first-party product surface (browser → worker), so /audit responses carry CORS.
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+} as const;
+const jsonCors = (data: unknown, status = 200): Response =>
+  Response.json(data, { status, headers: CORS });
+
+/**
+ * Mock audit runner (local dev): a canned adjudication, no model spend, so the onboarding → worker →
+ * report wiring is testable end-to-end without burning tokens. Enabled by `SENTINEL_AUDIT_MOCK=1`;
+ * OFF in prod, where the real `runAuditRequest` fires an Opus sweep.
+ */
+async function mockAuditRun(req: AuditRequest): Promise<Adjudication> {
+  console.log(`[audit-request] MOCK run for ${req.contractId} (SENTINEL_AUDIT_MOCK)`);
+  await new Promise((r) => setTimeout(r, 1500));
+  return adjudicateFindings({
+    sessionId: `mock:${req.contractId}`,
+    contractId: req.contractId,
+    findings: [
+      {
+        title: "socialize-debt forces unbounded LP loss",
+        severity: "critical",
+        class: "bug",
+        verifierVerdict: "confirmed",
+        pocStatus: "green",
+        origin: "audit",
+        blastRadius: "100% of LP redemption value",
+        recommendedAction:
+          "Cap the socialize-debt write-down and re-check the authorized-caller set.",
+      },
+    ],
+    tokenCostUsd: 0,
+  });
+}
+
+const defaultAuditRunner: (r: AuditRequest) => Promise<Adjudication> = process.env
+  .SENTINEL_AUDIT_MOCK
+  ? mockAuditRun
+  : runAuditRequest;
+
 /**
  * On-demand audit ingress (the "bring your contract" front door): `POST /audit {contractId, tier?}`.
  * Validates the id via `@secondlayer/stacks`, reserves the spend estimate (cap-before-spend → 429),
- * then fires the audit ASYNC (sweeps run minutes) and returns 202 — the verdict flows to `notify`.
+ * registers the request, then fires the audit ASYNC (sweeps run minutes) and returns 202 + a requestId.
+ * The browser polls `GET /audit/:requestId` for the verdict; the verdict also flows to `notify`.
  * Network is auto-derived from the address (Tier 3.1). NOT signature-gated: this is a first-party
  * product surface, not a webhook — front the worker with the LB/auth in prod.
  */
 export async function handleAuditRequest(
   req: Request,
-  run: (r: AuditRequest) => Promise<unknown> = runAuditRequest,
+  run: (r: AuditRequest) => Promise<Adjudication> = defaultAuditRunner,
 ): Promise<Response> {
   let body: { contractId?: string; tier?: string; client?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
-    return Response.json({ error: "invalid JSON body" }, { status: 400 });
+    return jsonCors({ error: "invalid JSON body" }, 400);
   }
   const contractId = body.contractId?.trim() ?? "";
   if (!isValidContractId(contractId)) {
-    return Response.json(
-      { error: "contractId must be a valid address.contract-name" },
-      { status: 400 },
-    );
+    return jsonCors({ error: "contractId must be a valid address.contract-name" }, 400);
   }
   const tier: Tier = body.tier === "deep" ? "deep" : "monitor";
   const gate = await reserve(tier);
   if (!gate.allowed) {
-    return Response.json({ error: `spend ceiling: ${gate.reason}` }, { status: 429 });
+    return jsonCors({ error: `spend ceiling: ${gate.reason}` }, 429);
   }
 
   const request: AuditRequest = { contractId, tier, client: body.client };
-  const sessionId = `audit-request:${contractId}`;
-  // Fire-and-forget: audits take minutes. Result → notify. (Durable queue is a Tier-2 hardening item.)
-  run(request).catch((e) =>
-    console.error(`[audit-request] ${contractId} failed: ${(e as Error).message}`),
+  const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  setAuditRunning(requestId, contractId, tier);
+  // Fire-and-forget: audits take minutes. On completion the public result lands in the store for the
+  // browser to poll. (Durable queue + store is a backend-hardening item.)
+  run(request)
+    .then((adj) => setAuditDone(requestId, toPublicResult(adj)))
+    .catch((e) => {
+      console.error(`[audit-request] ${contractId} failed: ${(e as Error).message}`);
+      setAuditError(requestId, (e as Error).message);
+    });
+  console.log(
+    `[audit-request] queued ${contractId} (${tier}, ${networkOf(contractId)}) → ${requestId}`,
   );
-  console.log(`[audit-request] queued ${contractId} (${tier}, ${networkOf(contractId)})`);
-  return Response.json(
-    { status: "running", sessionId, contractId, tier, network: networkOf(contractId) },
-    { status: 202 },
+  return jsonCors(
+    { status: "running", sessionId: requestId, contractId, tier, network: networkOf(contractId) },
+    202,
   );
+}
+
+/** `GET /audit/:requestId` — the browser polls this for the audit's status + public verdict. */
+export function handleAuditStatus(requestId: string): Response {
+  const s = getAuditStatus(requestId);
+  if (!s) return jsonCors({ error: "unknown request id" }, 404);
+  return jsonCors(s);
 }
 
 // Minimal Bun server when run directly.
@@ -395,12 +457,19 @@ if (import.meta.main) {
     port,
     fetch: (req) => {
       const { pathname } = new URL(req.url);
+      // CORS preflight for the browser-facing /audit routes.
+      if (req.method === "OPTIONS" && pathname.startsWith("/audit")) {
+        return new Response(null, { status: 204, headers: CORS });
+      }
       // Liveness probe for the container host / LB (RUNBOOK health check).
       if (req.method === "GET" && pathname === "/health") {
         return Response.json({ ok: true, service: "sentinel-bridge" });
       }
-      // On-demand audit front door.
+      // On-demand audit front door + status polling.
       if (req.method === "POST" && pathname === "/audit") return handleAuditRequest(req);
+      if (req.method === "GET" && pathname.startsWith("/audit/")) {
+        return handleAuditStatus(decodeURIComponent(pathname.slice("/audit/".length)));
+      }
       return req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 });
     },
   });
