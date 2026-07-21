@@ -1,5 +1,17 @@
 # audit-sentinel
 
+> ⚠️ **This README is STALE — it predates the two biggest architecture reversals** and is retained
+> only for the spike history below. **Source of truth: [CLAUDE.md](./CLAUDE.md) +
+> [docs/roadmap.md](./docs/roadmap.md).** What changed since this was written:
+> - **Runtime: eve is GUTTED → the engine is the Claude Agent SDK, direct to Anthropic**
+>   (`engine/audit.ts`); no eve, no Vercel AI Gateway. (This doc's "eve, not Claude Agent SDK" is now reversed.)
+> - **Host: NOT Vercel serverless → a container/VM** for the audit worker (Phase 6, `deploy/`); the
+>   sandbox is `docker run --network none` via `engine/tools/run-simnet-poc.ts`, not an eve backend.
+> - **The `agent/` layout below is eve-era.** Real engine tools live in `engine/tools/`
+>   (`fetch_contract_source` + `run_simnet_poc` ONLY); `find_value_contracts` was REMOVED (discovery is
+>   currently MISSING — re-add per `docs/plans/discovery-find-value-contracts.md`).
+> - Repo renamed `audit-sentinel` → `sentinel`.
+
 Continuous Stacks asset-safety audit pipeline. A **separate project, powered by
 secondlayer** — it depends on the *published* `@secondlayer/*` packages and
 consumes secondlayer's hosted services (Index / Subgraphs / Streams /
@@ -99,8 +111,9 @@ Researched upgrade paths: **gVisor `runsc`** (stronger no-KVM isolation) → **`
 ## Status of follow-ups (this pass)
 - ✅ Remaining 4 auditor dimensions ported (share-accounting, interest-math,
   flashloan-economics, invariants-dos) — 7 subagents total.
-- ✅ `find_value_contracts` wired to the `token-balances` subgraph (REST query +
-  seed fallback); `subgraphs/token-balances.ts` authored (deploy with `sl`).
+- ❌ **STALE:** `find_value_contracts` was REMOVED in the eve→Agent-SDK migration (it was an eve
+  tool). Discovery is currently MISSING — re-add per `docs/plans/discovery-find-value-contracts.md`.
+  `subgraphs/token-balances.ts` is a DEFINED-but-undeployed schema (superseded by `asset-holdings.ts`).
 - ✅ secondlayer-webhook HTTP bridge (`webhooks/secondlayer-webhook.ts`) — verifies
   the signature and forwards to `/eve/v1/session`. (Native `defineChannel` route
   is deferred: 0.12.0's channel generics are heavy and the HTTP-channel doc 404s.)

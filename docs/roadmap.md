@@ -15,7 +15,7 @@ Status: ✅ done · 🔵 now · ⏭ next · 🔶 later · 🔁 continuous
 | Project docs + auditor knowledge base | ✅ | this session — wired into all subagents |
 | AI-Gateway paid credits (live Opus) | ✅ | smoke test passed, no 403 |
 | **Commit the session's work** | 🔵 | all uncommitted on `main`; branch first |
-| secondlayer API creds (`SECONDLAYER_API_URL`/`_KEY`) | 🔵 | **needs you** — gates discovery + sweep |
+| secondlayer API creds (`SECONDLAYER_API_URL`/`_KEY`) | ✅ | live in `.env.local`; verified 2026-07-21 (Index `usage()` OK, tier `build`) |
 | Deploy `token-balances` subgraph (`sl`) | 🔵 | **needs you** (auth) |
 
 ## Phase 1 — Discovery widening (next)
@@ -55,9 +55,18 @@ Don't resolve before Phase 2 evidence. Tracked in [business-model.md](./business
 ## Continuous — Maintenance
 | Item | Status | Notes |
 |---|---|---|
-| Clarity-drift check (monthly) | 🔁 ✅ automated | eve schedule + `check_clarity_drift` (report-only) |
+| Clarity-drift check (monthly) | 🔁 ⏭ **NOT automated** | was eve schedule + `check_clarity_drift`; **eve gutted** → both the tool (re-add as an engine MCP tool) AND a scheduler are gone. Needs the eval-runner below. |
 | Incident-corpus refresh | 🔁 | manual: Claude Code `stacks-hacks-research` workflow; automation in [backlog.md](./backlog.md) |
 | Keep `clarity-baseline.ts` in sync with the `.md` docs | 🔁 | see [staying-current.md](./staying-current.md) |
+
+## Platform — Monitoring lanes
+Three execution lanes for the monitoring product. See [monitoring.md](./monitoring.md).
+| Item | Status | Notes / deps |
+|---|---|---|
+| **Reactive lane** (webhook push → triage/audit) | ✅ **proven live** | `webhooks/secondlayer-webhook.ts` (:3001) + `/health`; M2–M4 done. 2026-07-21: proven E2E via a real secondlayer **signed** delivery through a cloudflared tunnel → bridge **200** (verified); forged sig → **401** (verify enforced). |
+| **Baseline lane** (advisory outflow distributions) | ✅ | `monitoring/baseline.ts`; manual CLI |
+| **Invariant lane** (poll → conservation check) | ✅ **alerting** | `monitoring/invariant.ts` (evaluator) + `monitoring/invariant-pipeline.ts` (`runInvariant`/`runInvariantRegistry` → `adjudicate → notify`). Notify egress now HMAC-signed (`signStandardWebhook`). |
+| **Scheduled-eval runner** (the poll-lane enabler) | ✅ **built + running** | `monitoring/scheduler.ts` (`runScheduledTick`/`startScheduler`); `sentinel-scheduler` compose service, ticks the invariant registry on `SENTINEL_SCHEDULE_INTERVAL_MS` (default 10m). Drift-check still a planned 2nd job (Tier 4). |
 
 ---
 
