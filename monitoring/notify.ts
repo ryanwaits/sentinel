@@ -13,6 +13,7 @@
  *
  * State persists in `.sentinel/notifications.json` (same seam as the rest; external KV in prod).
  */
+import { createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Adjudication } from "./adjudication";
@@ -76,6 +77,25 @@ function buildPayload(adj: Adjudication, level: string) {
   };
 }
 
+/**
+ * Sign an outbound payload with Standard Webhooks HMAC — SYMMETRIC with the ingress
+ * `verifyWebhookSignature` (round-trip verified). Headers `webhook-id` / `webhook-timestamp` /
+ * `webhook-signature`; signed content `id.timestamp.body`; HMAC-SHA256 → base64, `v1,`-prefixed. The
+ * secret may be `whsec_<base64>` (key = decoded bytes) or a raw string (key = utf8).
+ */
+export function signStandardWebhook(
+  body: string,
+  secret: string,
+  id: string,
+  tsSec: number,
+): Record<string, string> {
+  const key = secret.startsWith("whsec_")
+    ? Buffer.from(secret.slice(6), "base64")
+    : Buffer.from(secret, "utf8");
+  const sig = createHmac("sha256", key).update(`${id}.${tsSec}.${body}`).digest("base64");
+  return { "webhook-id": id, "webhook-timestamp": String(tsSec), "webhook-signature": `v1,${sig}` };
+}
+
 async function emit(adj: Adjudication, level: string): Promise<void> {
   const payload = buildPayload(adj, level);
   // eslint-disable-next-line no-console
@@ -84,16 +104,24 @@ async function emit(adj: Adjudication, level: string): Promise<void> {
       `${adj.provisional ? " (provisional)" : ""} | ${adj.recommendedAction} | session ${adj.sessionId}`,
   );
   const url = process.env.SENTINEL_NOTIFY_URL; // internal channel only
-  if (url) {
-    try {
-      await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      console.error(`[notify] channel POST failed: ${(err as Error).message}`);
-    }
+  if (!url) return;
+
+  const body = JSON.stringify(payload);
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const secret = process.env.SENTINEL_NOTIFY_SECRET;
+  if (secret) {
+    const id = `msg_${adj.sessionId}:${level}`;
+    Object.assign(headers, signStandardWebhook(body, secret, id, Math.floor(Date.now() / 1000)));
+  } else {
+    // Never silently ship unsigned — a downstream verifier can't trust it, and quiet is dishonest.
+    console.warn(
+      "[notify] SENTINEL_NOTIFY_SECRET unset — POSTing UNSIGNED; set it to sign egress.",
+    );
+  }
+  try {
+    await fetch(url, { method: "POST", headers, body });
+  } catch (err) {
+    console.error(`[notify] channel POST failed: ${(err as Error).message}`);
   }
 }
 

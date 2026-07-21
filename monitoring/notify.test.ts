@@ -4,7 +4,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { Adjudication } from "./adjudication";
-import { notify } from "./notify";
+import { notify, signStandardWebhook } from "./notify";
+import { verifySignature } from "./sources/trigger-source";
 
 function adj(sessionId: string, over: Partial<Adjudication> = {}): Adjudication {
   return {
@@ -62,5 +63,26 @@ describe("notify", () => {
     const r = await notify(adj("notify-no-disclose"));
     expect(r.sent).toBe(true);
     if (prev !== undefined) process.env.SENTINEL_NOTIFY_URL = prev;
+  });
+});
+
+describe("signStandardWebhook (egress signing)", () => {
+  test("round-trips with the ingress verifier; a tampered body fails", () => {
+    const secret = `whsec_${Buffer.from("sentinel-notify-test-secret").toString("base64")}`;
+    const body = JSON.stringify({ event: "sentinel_alert", severity: "high" });
+    const ts = Math.floor(Date.now() / 1000); // current, so the verifier's timestamp tolerance passes
+    const headers = signStandardWebhook(body, secret, "msg_test", ts);
+    expect(headers["webhook-signature"]).toMatch(/^v1,/);
+    expect(verifySignature(body, headers, secret)).toBe(true);
+    expect(verifySignature(`${body} `, headers, secret)).toBe(false);
+  });
+
+  test("a wrong secret does not verify", () => {
+    const secret = `whsec_${Buffer.from("real-secret").toString("base64")}`;
+    const body = JSON.stringify({ x: 1 });
+    const headers = signStandardWebhook(body, secret, "msg_test", Math.floor(Date.now() / 1000));
+    expect(verifySignature(body, headers, `whsec_${Buffer.from("other").toString("base64")}`)).toBe(
+      false,
+    );
   });
 });
