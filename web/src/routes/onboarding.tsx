@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Check, Loader2, ArrowRight, ArrowLeft, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -6,7 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Chip } from "@/components/primitives"
 import { AuditPhases } from "@/components/audit"
 import { networkOf } from "@/lib/stacks-id"
+import { type AuditStatus, getAuditStatus, startAudit } from "@/lib/worker"
 import { cn } from "@/lib/utils"
+
+type Session = { sessionId: string; live: boolean }
+
+const sevTone = (s: string) => (s === "critical" ? "critical" : s === "high" ? "accent" : "warning")
 
 const TIERS = [
   { k: "monitor", title: "Monitor", blurb: "Sonnet · ~$2" },
@@ -155,29 +160,105 @@ function StepAdd({ onNext }: { onNext: (contract: string, tier: string) => void 
   )
 }
 
-function StepAudit({ contract, onNext }: { contract: string; onNext: () => void }) {
+function StepAudit({
+  contract,
+  session,
+  onNext,
+}: {
+  contract: string
+  session: Session
+  onNext: () => void
+}) {
+  const [status, setStatus] = useState<AuditStatus | { error: string } | null>(null)
+
+  // Poll the worker for the real verdict when we have a live request. Fails soft: no worker → the
+  // example flow below (so the deployed marketing site works without a worker wired up).
+  useEffect(() => {
+    if (!session.live || !session.sessionId) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      const s = await getAuditStatus(session.sessionId)
+      if (!active) return
+      setStatus(s)
+      if ("status" in s && s.status === "running") timer = setTimeout(poll, 1500)
+    }
+    void poll()
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [session.sessionId, session.live])
+
+  const done = status && "status" in status && status.status === "done" ? status.result : null
+  // Both the client error ({error}) and the worker's error status carry an `error` field.
+  const failed = Boolean(status && "error" in status)
+  const running = session.live && !done && !failed
+
   return (
     <div>
       <div className="flex items-center gap-2.5">
-        <h1 className="truncate text-[22px] font-semibold">Auditing {contract}</h1>
-        <Chip tone="accent">deep</Chip>
+        <h1 className="truncate text-[22px] font-semibold">
+          {done ? "Audit complete" : `Auditing ${contract}`}
+        </h1>
+        <Chip tone={session.live ? "accent" : "ghost"}>{session.live ? "live" : "example"}</Chip>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        The multi-agent engine is reading the contract, arguing with itself, and reproducing anything
-        it finds. This usually takes a few minutes.
+        The multi-agent engine reads the contract, adversarially verifies each finding, and reproduces
+        anything confirmed in an airgapped sandbox. No exploit touches a live chain.
       </p>
 
       <div className="mt-6">
-        <AuditPhases activeStep={2} />
+        <AuditPhases activeStep={done ? 99 : 2} />
       </div>
 
-      <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
-        <Loader2 className="size-[15px] animate-spin text-primary" />
-        <span className="text-[13px]">
-          Found <b className="font-medium text-ink-strong">socialize-debt unbounded LP loss</b>{" "}
-          <span className="text-muted-foreground">· verifying, then reproducing in the sandbox</span>
-        </span>
-      </div>
+      {done ? (
+        <div className="mt-4 grid gap-2">
+          {done.findings.length === 0 ? (
+            <div className="rounded-[10px] border border-border bg-secondary px-[15px] py-[13px] text-[13px] text-muted-foreground">
+              No exploitable finding. Sentinel would rather say clean than inflate one.
+            </div>
+          ) : (
+            done.findings.map((f) => (
+              <div key={f.title} className="rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
+                <div className="text-[13.5px] font-medium text-ink-strong">{f.title}</div>
+                <div className="mt-2 flex flex-wrap gap-[7px]">
+                  <Chip tone={sevTone(f.severity)}>{f.severity}</Chip>
+                  <Chip tone={f.class === "bug" ? "neutral" : "ghost"}>{f.class}</Chip>
+                  {f.verdict === "confirmed" && <Chip tone="neutral">confirmed</Chip>}
+                  {f.poc === "green" && (
+                    <Chip tone="success">
+                      <Check className="size-3" /> PoC green
+                    </Chip>
+                  )}
+                  {f.poc === "pending" && <Chip tone="warning">PoC pending</Chip>}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : failed ? (
+        <div className="mt-4 rounded-[10px] border border-border bg-secondary px-[15px] py-[13px] text-[13px] text-muted-foreground">
+          Couldn't reach the audit worker, showing the example instead. Point{" "}
+          <span className="font-mono text-[12px]">VITE_SENTINEL_WORKER_URL</span> at a running worker to
+          run it for real.
+        </div>
+      ) : running ? (
+        <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
+          <Loader2 className="size-[15px] animate-spin text-primary" />
+          <span className="text-[13px] text-muted-foreground">
+            Running the panel, verifying, then reproducing in the sandbox…
+          </span>
+        </div>
+      ) : (
+        <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
+          <Loader2 className="size-[15px] animate-spin text-primary" />
+          <span className="text-[13px]">
+            Found <b className="font-medium text-ink-strong">socialize-debt unbounded LP loss</b>{" "}
+            <span className="text-muted-foreground">· verifying, then reproducing in the sandbox</span>
+          </span>
+        </div>
+      )}
 
       <div className="mt-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-faint">
         <span>8 subagents on the panel</span>
@@ -186,8 +267,10 @@ function StepAudit({ contract, onNext }: { contract: string; onNext: () => void 
       </div>
 
       <div className="mt-[26px] flex items-center justify-between">
-        <span className="text-[12.5px] text-faint">You can close this. We'll email you when it's done.</span>
-        <Button size="lg" onClick={onNext}>
+        <span className="text-[12.5px] text-faint">
+          {running ? "This takes a few minutes. You can leave it running." : "The audit becomes the monitoring scope."}
+        </span>
+        <Button size="lg" onClick={onNext} disabled={running}>
           Review the plan
           <ArrowRight />
         </Button>
@@ -280,21 +363,32 @@ function StepLive({ contract, onRestart }: { contract: string; onRestart: () => 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [contract, setContract] = useState("v0-vault-sbtc")
+  const [session, setSession] = useState<Session>({ sessionId: "", live: false })
+
+  // Kick off a real audit against the worker; fall through to the example flow if none is reachable.
+  async function begin(fullId: string, tier: string) {
+    setContract(fullId.includes(".") ? (fullId.split(".").pop() ?? fullId) : fullId)
+    const started = await startAudit(fullId, tier)
+    setSession("sessionId" in started ? { sessionId: started.sessionId, live: true } : { sessionId: "", live: false })
+    setStep(1)
+  }
+
   return (
     <main className="flex flex-1 justify-center px-6 py-12">
       <div className="w-full max-w-[660px]">
         <Stepper step={step} />
-        {step === 0 && (
-          <StepAdd
-            onNext={(c) => {
-              setContract(c.includes(".") ? (c.split(".").pop() ?? c) : c)
-              setStep(1)
+        {step === 0 && <StepAdd onNext={begin} />}
+        {step === 1 && <StepAudit contract={contract} session={session} onNext={() => setStep(2)} />}
+        {step === 2 && <StepPlan onNext={() => setStep(3)} onBack={() => setStep(1)} />}
+        {step === 3 && (
+          <StepLive
+            contract={contract}
+            onRestart={() => {
+              setSession({ sessionId: "", live: false })
+              setStep(0)
             }}
           />
         )}
-        {step === 1 && <StepAudit contract={contract} onNext={() => setStep(2)} />}
-        {step === 2 && <StepPlan onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-        {step === 3 && <StepLive contract={contract} onRestart={() => setStep(0)} />}
       </div>
     </main>
   )
