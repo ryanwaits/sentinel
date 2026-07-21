@@ -62,7 +62,7 @@ function ContractRow({ c }: { c: Contract }) {
 
         <div className="text-[13px] text-muted-foreground">
           {auditing ? (
-            <span className="text-primary">discovering…</span>
+            <span className="text-primary">auditing…</span>
           ) : (
             <span>
               <b className="font-medium text-foreground tnum">{c.fns}</b> fns ·{" "}
@@ -143,7 +143,7 @@ export default function ContractsPage() {
       <div className="flex items-end gap-3 px-[22px] pb-[22px]">
         <div>
           <h1 className="text-2xl font-semibold">Contracts</h1>
-          <p className="mt-[5px] text-[13.5px] text-muted-foreground">The value-holding contracts Sentinel audits and watches.</p>
+          <p className="mt-[5px] text-[13.5px] text-muted-foreground">The contracts you've brought to Sentinel, audited and under watch.</p>
         </div>
         <span className="flex-1" />
         <Button size="sm">
@@ -177,7 +177,7 @@ export default function ContractsPage() {
       </div>
 
       <p className="mx-[22px] mt-3.5 text-[12.5px] text-faint">
-        Discovery ranks candidates by TVL × risk. Add a contract to audit and start watching it.
+        Bring another contract to audit, and Sentinel starts watching it from what it finds.
       </p>
     </div>
   )
