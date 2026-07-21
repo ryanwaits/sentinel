@@ -13,6 +13,7 @@ const C = "SP.x.vault";
 const config = (over: Partial<MonitoringConfig> = {}): MonitoringConfig => ({
   client: "t",
   contractId: C,
+  network: "mainnet",
   archetype: "vault",
   tier: "monitor",
   sensitiveFns: [],

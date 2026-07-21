@@ -23,6 +23,7 @@ import {
   SensitiveFn,
   tierForArchetype,
 } from "./config";
+import { Network, networkOf } from "./network";
 
 export const KB_DIR = process.env.SENTINEL_KB_DIR ?? join(process.cwd(), "sentinel", "kb");
 
@@ -44,6 +45,9 @@ export const PriorFinding = z.object({
 export const KBRecord = z.object({
   contractId: z.string(),
   client: z.string(),
+  /** Chain the contract lives on. Optional: derived from the address (network.ts `networkOf`) when
+   *  absent — set it only for a devnet deployment (address-indistinct from testnet). */
+  network: Network.optional(),
   archetype: Archetype,
   /** Static call-graph closure audited (target + every contract it reaches). */
   closure: z.array(z.string()).default([]),
@@ -111,6 +115,8 @@ export function deriveConfig(contractId: string): MonitoringConfig {
   return MonitoringConfig.parse({
     client: rec.client,
     contractId: rec.contractId,
+    // Stored network wins (needed for devnet); otherwise derive it from the address.
+    network: rec.network ?? networkOf(rec.contractId),
     archetype: rec.archetype,
     tier: tierForArchetype(rec.archetype),
     sensitiveFns: rec.sensitiveFns,

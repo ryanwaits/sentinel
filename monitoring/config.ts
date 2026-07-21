@@ -14,6 +14,7 @@ import { z } from "zod";
 // Value import is cycle-safe: adjudication.ts value-imports ONLY zod (its kb/trigger-state imports
 // are `import type`, erased at runtime), so config -> adjudication never forms a runtime cycle.
 import { Severity } from "./adjudication";
+import { Network } from "./network";
 
 /** Chain-trigger classes (MVP set). Tier is derived from these + the archetype class. */
 export const TriggerClass = z.enum([
@@ -95,6 +96,9 @@ export type SensitiveFn = z.infer<typeof SensitiveFn>;
 export const MonitoringConfig = z.object({
   client: z.string(),
   contractId: z.string().describe("address.contract-name of the watched contract"),
+  /** Which chain the contract lives on (dev-lifecycle axis). Derived from the address for
+   *  mainnet/testnet (see network.ts `networkOf`); set explicitly only for devnet (address-indistinct). */
+  network: Network.default("mainnet"),
   archetype: Archetype,
   /** Audit tier fired when one of this contract's sensitive fns triggers. */
   tier: Tier,

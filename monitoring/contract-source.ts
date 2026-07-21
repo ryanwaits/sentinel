@@ -8,16 +8,19 @@
  *     off a stacks-core branch, or a client's LST contracts before they ship). Result carries
  *     `origin: "local"` + the pinned `ref` so the audit + report know these are local bytes, NOT a
  *     chain-confirmed deployment.
- *  2. NODE — whatever `STACKS_NODE_URL` points at (`/v2/contracts/source`). In prod that should be the
- *     secondlayer-operated node (`:20443`); Hiro is only an explicit spike fallback. secondlayer has no
- *     contract-source API yet (source is deferred off the Index), so node RPC IS the secondlayer path.
+ *  2. NODE — the network's Stacks node (`/v2/contracts/source`), resolved per-network by
+ *     `resolveNodeUrl` (network.ts): mainnet → `STACKS_NODE_URL`, testnet/devnet → their own env. In
+ *     prod that should be the secondlayer-operated node; Hiro is only an explicit spike fallback.
+ *     secondlayer has no contract-source API yet (source is deferred off the Index), so node RPC IS
+ *     the secondlayer path. Network is DERIVED from the address via `@secondlayer/stacks` (`networkOf`).
  *
  * If neither path resolves the id, reads return null — no silent stub, per the credibility rules.
  */
+
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-
-const NODE_URL = process.env.STACKS_NODE_URL;
+import { parseContractId } from "@secondlayer/stacks/utils";
+import { type Network, networkOf, resolveNodeUrl } from "./network";
 
 /** Provenance of a source read — the report/method section MUST distinguish these. */
 export type SourceOrigin = "node" | "local";
@@ -77,12 +80,18 @@ function fetchLocalById(contractId: string): SourceResult | null {
   };
 }
 
-/** Fetch one contract's source off the configured node, or null. */
-async function fetchNodeById(contractId: string): Promise<SourceResult | null> {
-  if (!NODE_URL) return null;
-  const [address, contractName] = contractId.split(".");
-  if (!address || !contractName) return null;
-  const res = await fetch(`${NODE_URL}/v2/contracts/source/${address}/${contractName}`);
+/** Fetch one contract's source off the network's node, or null. */
+async function fetchNodeById(contractId: string, network: Network): Promise<SourceResult | null> {
+  const nodeUrl = resolveNodeUrl(network);
+  if (!nodeUrl) return null;
+  let address: string;
+  let contractName: string;
+  try {
+    [address, contractName] = parseContractId(contractId);
+  } catch {
+    return null; // not a valid address.contract-name
+  }
+  const res = await fetch(`${nodeUrl}/v2/contracts/source/${address}/${contractName}`);
   if (!res.ok) return null;
   const data = (await res.json()) as { source: string; publish_height: number };
   return {
@@ -96,13 +105,27 @@ async function fetchNodeById(contractId: string): Promise<SourceResult | null> {
 
 /**
  * Fetch one contract's source. Local registry (explicit pre-deployment opt-in) wins over node RPC;
- * returns null if neither path resolves the id.
+ * returns null if neither path resolves the id. `network` defaults to the address-derived network
+ * (`networkOf`) — pass it explicitly only for a devnet deployment (address-indistinct from testnet).
  */
-export async function fetchSourceById(contractId: string): Promise<SourceResult | null> {
-  return fetchLocalById(contractId) ?? (await fetchNodeById(contractId));
+export async function fetchSourceById(
+  contractId: string,
+  network?: Network,
+): Promise<SourceResult | null> {
+  const local = fetchLocalById(contractId);
+  if (local) return local;
+  let net = network;
+  if (!net) {
+    try {
+      net = networkOf(contractId); // derive from the address; invalid id → null read
+    } catch {
+      return null;
+    }
+  }
+  return fetchNodeById(contractId, net);
 }
 
-/** True when ANY source-read surface is configured (a local registry OR a node URL). */
-export function sourceReadEnabled(): boolean {
-  return Boolean(process.env.SENTINEL_LOCAL_SOURCES) || Boolean(NODE_URL);
+/** True when ANY source-read surface is configured for the network (a local registry OR a node URL). */
+export function sourceReadEnabled(network: Network = "mainnet"): boolean {
+  return Boolean(process.env.SENTINEL_LOCAL_SOURCES) || Boolean(resolveNodeUrl(network));
 }

@@ -17,6 +17,7 @@ const PROPOSAL = `${ADDR}.evil-proposal`;
 const treasuryConfig: MonitoringConfig = {
   client: "test",
   contractId: TREASURY,
+  network: "mainnet",
   archetype: "treasury",
   tier: "deep",
   sensitiveFns: [],
