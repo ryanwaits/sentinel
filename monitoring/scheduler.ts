@@ -8,9 +8,9 @@
  * and shares only the durable sink (warn-once state, snapshots). The cadence is a seam: swap this
  * in-process interval for a platform cron hitting a /tick endpoint without touching `runScheduledTick`.
  *
- * Drift-check (monthly clarity-drift) is a PLANNED second job — `check_clarity_drift` was gutted with
- * eve and is re-added in Tier 4. Until then the tick announces it is not wired (never a silent skip —
- * the credibility rule). Wire it into `runScheduledTick` when it lands.
+ * Drift-check (monthly clarity-baseline drift) is DEFERRED as low-value knowledge-maintenance (the panel
+ * reads live source; built-ins change rarely — see docs/plans/clarity-drift-check.md). The tick names it
+ * so its absence is explicit, never a silent skip. Fold it in opportunistically when a Clarity release lands.
  */
 import type { Invariant, ObservationReader } from "./invariant";
 import { runInvariantRegistry } from "./invariant-pipeline";
@@ -48,7 +48,7 @@ export async function runScheduledTick(opts?: {
   const alerted = results.filter((r) => r.sent).length;
   console.log(
     `[scheduler] tick ${at} — invariants=${results.length} violations=${violations} alerted=${alerted}` +
-      " · drift-check: NOT YET WIRED (Tier 4, check_clarity_drift re-add)",
+      " · drift-check: deferred (low-value maintenance, see clarity-drift-check.md)",
   );
   return { at, invariants: results.length, violations, alerted, driftCheck: "not-wired" };
 }
