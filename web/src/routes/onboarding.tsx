@@ -1,25 +1,23 @@
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { Check, Loader2, ArrowRight, ArrowLeft } from "lucide-react"
+import { Check, Loader2, ArrowRight, ArrowLeft, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Chip } from "@/components/primitives"
 import { AuditPhases } from "@/components/audit"
+import { networkOf } from "@/lib/stacks-id"
 import { cn } from "@/lib/utils"
 
-type Candidate = { name: string; arch: string; tvl: string; risk: "high" | "medium" }
-type Tier = { k: string; title: string; blurb: string }
+const TIERS = [
+  { k: "monitor", title: "Monitor", blurb: "Sonnet · ~$2" },
+  { k: "deep", title: "Deep", blurb: "Opus · full panel" },
+] as const
 
-const CANDIDATES: Candidate[] = [
-  { name: "v0-vault-sbtc", arch: "vault", tvl: "≈ 51 BTC", risk: "high" },
-  { name: "ccd002-treasury-mia", arch: "dao", tvl: "≈ 4.1M STX", risk: "high" },
-  { name: "dlmm-pool-stx-usdcx", arch: "amm", tvl: "≈ 1.8M STX", risk: "medium" },
-]
-
-const TIERS: Tier[] = [
-  { k: "deep", title: "Deep", blurb: "Opus · full panel · $99 · minutes" },
-  { k: "monitor", title: "Monitor", blurb: "Sonnet · fast · ~$0.40" },
-]
+const LIFECYCLE = [
+  { k: "Devnet", title: "Audit early", blurb: "Catch bugs while the code is cheap to change.", now: false },
+  { k: "Testnet", title: "Pre-launch review", blurb: "A verified report on the exact bytes you ship.", now: false },
+  { k: "Mainnet", title: "Continuous watch", blurb: "Findings become the signals monitoring looks for.", now: true },
+] as const
 
 const STEPS = ["Add", "Audit", "Plan", "Live"] as const
 
@@ -56,127 +54,102 @@ function Stepper({ step }: { step: number }) {
   )
 }
 
-function StepAdd({ onNext }: { onNext: (contract: string, email: string) => void }) {
+function StepAdd({ onNext }: { onNext: (contract: string, tier: string) => void }) {
   const [searchParams] = useSearchParams()
-  const [sel, setSel] = useState("v0-vault-sbtc")
+  const [contractId, setContractId] = useState(
+    searchParams.get("contract") ?? "SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.v0-vault-sbtc",
+  )
   const [tier, setTier] = useState("deep")
-  const [contractId, setContractId] = useState(searchParams.get("contract") ?? "")
-  const [email, setEmail] = useState("")
-  const [emailError, setEmailError] = useState<string | null>(null)
-  const activeContract = contractId.trim() || sel
-  // Contract names are short; pasted principals ("SP….contract-name") are long — show just the
-  // name so the submit button never forces the row to wrap word-by-word.
-  const displayContract = activeContract.includes(".") ? activeContract.split(".").pop() : activeContract
-  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
-
-  function submit() {
-    if (!emailValid) {
-      setEmailError("Enter a valid email — we'll send the report there.")
-      return
-    }
-    setEmailError(null)
-    onNext(activeContract, email)
-  }
+  // Network is read from the address (@secondlayer/stacks), never asked for.
+  const network = networkOf(contractId)
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">What should Sentinel watch?</h1>
-      <p className="mt-2 text-[14.5px] text-muted-foreground">
-        Paste a Clarity contract, or pick one we ranked by value and risk. Sentinel audits it, then
-        scopes monitoring from what it finds.
+      <div className="font-mono text-[11.5px] uppercase tracking-[0.1em] text-primary">New audit</div>
+      <h1 className="mt-3 text-2xl font-semibold">Point Sentinel at a contract.</h1>
+      <p className="mt-2 max-w-[52ch] text-[14.5px] text-muted-foreground">
+        It reads the source, runs the multi-agent audit, reproduces anything confirmed in an
+        airgapped sandbox, then hands you a report. No exploit ever touches a live chain.
       </p>
 
-      <div className="mt-6 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-        <span className="font-mono text-[13px] text-faint">SP…</span>
-        <Input
-          value={contractId}
-          onChange={(e) => setContractId(e.target.value)}
-          placeholder="paste a contract principal.name"
-          className="h-6 border-0 bg-transparent px-0 font-mono text-[13.5px] focus-visible:ring-0"
-        />
-      </div>
+      <form className="mt-[22px] flex flex-col gap-3" onSubmit={(e) => e.preventDefault()}>
+        <div className="flex h-11 items-center gap-2.5 rounded-[9px] border border-border-strong bg-card px-3 transition-shadow focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary-weak">
+          <span className="font-mono text-[12px] text-faint">contract</span>
+          <Input
+            value={contractId}
+            onChange={(e) => setContractId(e.target.value)}
+            spellCheck={false}
+            aria-label="Contract id"
+            placeholder="SP…principal.contract-name"
+            className="h-6 border-0 bg-transparent px-0 font-mono text-[13.5px] focus-visible:ring-0"
+          />
+        </div>
 
-      <div className="mt-[26px] mb-2.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-        Discovered for you
-      </div>
-      <div className="grid gap-2">
-        {CANDIDATES.map((d) => {
-          const on = sel === d.name
-          return (
-            <button
-              key={d.name}
-              onClick={() => setSel(d.name)}
-              className={cn(
-                "flex items-center gap-3 rounded-[10px] border px-[15px] py-[13px] text-left transition-colors",
-                on ? "border-primary bg-primary-weak" : "border-border bg-card hover:bg-secondary",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-4 items-center justify-center rounded-full border",
-                  on ? "border-primary bg-primary text-primary-foreground" : "border-border",
-                )}
-              >
-                {on && <Check className="size-[11px]" strokeWidth={2.6} />}
+        <div className="flex items-center gap-2.5 px-0.5 text-[12.5px] text-muted-foreground">
+          {network ? (
+            <>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-success" />
+                Resolved on <b className="font-medium text-foreground">{network}</b>
               </span>
-              <span className="font-mono text-[13.5px] font-medium text-ink-strong">{d.name}</span>
-              <Chip tone="neutral">{d.arch}</Chip>
-              <span className="flex-1" />
-              <span className="font-mono text-[12px] text-muted-foreground tnum">{d.tvl}</span>
-              <Chip tone={d.risk === "high" ? "accent" : "ghost"}>{d.risk} risk</Chip>
-            </button>
-          )
-        })}
-      </div>
+              <span className="text-faint">· network read from the address, not asked</span>
+            </>
+          ) : (
+            <span className="flex items-center gap-1.5 text-faint">
+              <span className="size-2 rounded-full bg-border-strong" />
+              Paste an <span className="font-mono">address.contract-name</span> to resolve the network
+            </span>
+          )}
+        </div>
 
-      <div className="mt-[26px] mb-2.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-        Depth
-      </div>
-      <div className="flex gap-2">
-        {TIERS.map((t) => {
-          const on = tier === t.k
-          return (
-            <button
-              key={t.k}
-              onClick={() => setTier(t.k)}
-              className={cn(
-                "flex-1 rounded-[10px] border px-[15px] py-[13px] text-left transition-colors",
-                on ? "border-primary bg-primary-weak" : "border-border bg-card hover:bg-secondary",
-              )}
-            >
-              <div className="text-sm font-medium text-ink-strong">{t.title}</div>
-              <div className="mt-0.5 text-[12px] text-muted-foreground">{t.blurb}</div>
-            </button>
-          )
-        })}
-      </div>
+        <div className="my-1 flex items-center gap-3 text-[12px] text-faint before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+          or
+        </div>
 
-      <div className="mt-[26px] mb-2.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-        Where should we send the report?
-      </div>
-      <Input
-        type="email"
-        inputMode="email"
-        autoComplete="email"
-        value={email}
-        onChange={(e) => {
-          setEmail(e.target.value)
-          if (emailError) setEmailError(null)
-        }}
-        placeholder="you@protocol.xyz"
-        aria-invalid={!!emailError}
-        className={cn("h-11 font-mono text-[13.5px]", emailError && "border-destructive")}
-      />
-      {emailError && <p className="mt-2 text-[12.5px] text-destructive">{emailError}</p>}
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-[9px] border border-dashed border-border-strong px-3.5 py-[11px] text-[13px] text-muted-foreground transition-colors hover:bg-secondary">
+          <Upload className="size-4" strokeWidth={1.6} />
+          Upload a <span className="font-mono text-[12px]">.clar</span> file to audit pre-deployment
+          code (devnet / testnet).
+        </label>
 
-      <div className="mt-[22px] flex flex-wrap items-center justify-between gap-3">
-        <span className="min-w-0 flex-1 text-[12.5px] text-faint">
-          A real audit takes minutes. We'll email you when it's done.
-        </span>
-        <Button size="lg" onClick={submit} className="shrink-0">
-          Audit and watch {displayContract}
-          <ArrowRight />
-        </Button>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Depth</div>
+            <div className="inline-flex overflow-hidden rounded-lg border border-border-strong bg-card">
+              {TIERS.map((t) => (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={() => setTier(t.k)}
+                  className={cn(
+                    "border-r border-border px-[13px] py-2 text-left text-[12.5px] transition-colors last:border-r-0",
+                    tier === t.k ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.title}
+                  <span className="mt-px block font-mono text-[10px] text-faint">{t.blurb}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <Button size="lg" onClick={() => onNext(contractId, tier)} disabled={!network}>
+            Run audit
+            <ArrowRight />
+          </Button>
+        </div>
+      </form>
+
+      <div className="mt-[26px] flex border-t border-border pt-5">
+        {LIFECYCLE.map((s) => (
+          <div key={s.k} className="flex-1 pr-3.5">
+            <span className={cn("mb-2.5 block size-[9px] rounded-full", s.now ? "bg-primary" : "bg-border-strong")} />
+            <div className={cn("font-mono text-[10.5px] uppercase tracking-[0.08em]", s.now ? "text-primary" : "text-faint")}>
+              {s.k}
+            </div>
+            <div className="mt-[5px] text-[13px] text-foreground">{s.title}</div>
+            <div className="mt-[3px] text-[12px] leading-snug text-muted-foreground">{s.blurb}</div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -206,10 +179,10 @@ function StepAudit({ contract, onNext }: { contract: string; onNext: () => void 
         </span>
       </div>
 
-      <div className="mt-3.5 flex gap-4 text-[12.5px] text-faint">
-        <span className="font-mono tnum">2m 41s elapsed</span>
-        <span className="font-mono tnum">$0.74 so far</span>
-        <span>5 subagents</span>
+      <div className="mt-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-faint">
+        <span>8 subagents on the panel</span>
+        <span>·</span>
+        <span>adversarial verify, then sandbox reproduction</span>
       </div>
 
       <div className="mt-[26px] flex items-center justify-between">
@@ -314,7 +287,7 @@ export default function OnboardingPage() {
         {step === 0 && (
           <StepAdd
             onNext={(c) => {
-              setContract(c)
+              setContract(c.includes(".") ? (c.split(".").pop() ?? c) : c)
               setStep(1)
             }}
           />
