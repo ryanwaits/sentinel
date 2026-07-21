@@ -4,7 +4,12 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { SentinelMark } from "@/components/sentinel-mark"
+import { CONTRACTS } from "@/lib/mock"
 import { cn } from "@/lib/utils"
+
+// Coverage stat derived from the watched set, so it can't drift from the data it summarizes.
+const LIVE = CONTRACTS.filter((c) => c.status === "live")
+const WATCHED_FNS = LIVE.reduce((n, c) => n + (c.fns ?? 0), 0)
 
 type NavDef = { to: string; label: string; icon: LucideIcon; badge?: number }
 
@@ -54,8 +59,8 @@ function TopBar() {
       <div className="flex-1" />
       <span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
         <span className="size-[7px] rounded-full bg-success" />
-        Watching <b className="font-medium text-foreground tnum">3</b> contracts ·{" "}
-        <b className="font-medium text-foreground tnum">9</b> functions
+        Watching <b className="font-medium text-foreground tnum">{LIVE.length}</b> contracts ·{" "}
+        <b className="font-medium text-foreground tnum">{WATCHED_FNS}</b> functions
       </span>
     </header>
   )

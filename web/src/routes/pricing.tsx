@@ -66,9 +66,9 @@ function TierCard({ tier }: { tier: Tier }) {
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-2xl border p-6",
+        "relative flex flex-col rounded-xl border p-6",
         tier.reco
-          ? "border-primary bg-background shadow-lg shadow-primary/5"
+          ? "border-primary bg-background shadow-panel"
           : "border-border bg-card",
       )}
     >
