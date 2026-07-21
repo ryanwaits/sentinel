@@ -15,6 +15,7 @@ import { type Finding, SentinelFindings } from "../monitoring/adjudication";
 import type { KBRecord } from "../monitoring/kb";
 import type { Tier } from "../monitoring/spend-ceiling";
 import { FINDINGS_SCHEMA, KB_DISTILL_SCHEMA } from "./findings";
+import { enforceGates, type GateAction } from "./gates";
 import { type KBCandidate, KBCandidate as KBCandidateSchema } from "./kb-distill";
 import { FETCH_TOOL, POC_TOOL, sentinelServer } from "./tools";
 
@@ -105,7 +106,8 @@ Process (each step ONCE, in order, then stop):
 3. Collect the candidate findings, then verify them in a SINGLE verifier Task call: pass the verifier the FULL contract source AND the complete list of candidate findings at once (NOT one call per finding). It refutes false positives under Clarity semantics - especially internal-vs-live-balance accounting (share price off a data-var, not ft-get-balance, defeats donation/inflation), underflow/overflow ABORT, reverts roll back all state, ft-mint?/ft-burn? of 0 reverts. Mark refuted findings verifierVerdict "refuted" (keep them).
 4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE: pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE - then STOP (never retry, re-verify, or re-delegate).
 5. Return the structured findings object and end your turn. Do not keep working after you have it.
-Label findings honestly: real bug vs centralization/trust.${kbStep}${kbContext}`;
+Label findings honestly: real bug vs centralization/trust.
+A structural gate runs on your output: a "confirmed" verdict from a run that did NOT call the verifier subagent is auto-downgraded to "uncertain", and a confirmed bug at high/critical with pocStatus "na" is forced to "pending". So actually delegate to the verifier and actually run ${POC_TOOL} — you cannot self-certify past the gate.${kbStep}${kbContext}`;
 }
 
 function auditOptions(
@@ -163,6 +165,8 @@ export type AuditResult = {
   /** Present when opts.distillKB: the LLM-extracted archetype + sensitive fns for KB distillation. */
   kbCandidate?: KBCandidate;
   metrics: AuditMetrics;
+  /** Credibility-gate outcome: whether the run was verifier-backed + any structural downgrades applied. */
+  gate?: { verified: boolean; actions: GateAction[] };
   /** Raw final text (fallback / debugging). */
   rawResult?: string;
 };
@@ -194,6 +198,8 @@ export async function audit(
   const t0 = Date.now();
   let toolCalls = 0;
   let subagentTasks = 0;
+  // Which subagents actually ran — the evidence the credibility gate reads (not the model's claims).
+  const subagentTypes = new Set<string>();
   let result: Record<string, unknown> | null = null;
 
   for await (const msg of query({
@@ -201,10 +207,17 @@ export async function audit(
     options: auditOptions(model, panel, effort, kbContext, distillKB),
   })) {
     if (msg.type === "assistant") {
-      for (const block of (msg.message?.content ?? []) as Array<{ type: string; name?: string }>) {
+      for (const block of (msg.message?.content ?? []) as Array<{
+        type: string;
+        name?: string;
+        input?: { subagent_type?: string };
+      }>) {
         if (block.type === "tool_use") {
           toolCalls++;
-          if (block.name === "Agent" || block.name === "Task") subagentTasks++;
+          if (block.name === "Agent" || block.name === "Task") {
+            subagentTasks++;
+            if (block.input?.subagent_type) subagentTypes.add(block.input.subagent_type);
+          }
           opts.onTool?.(block.name ?? "?", Date.now() - t0);
         }
       }
@@ -231,6 +244,19 @@ export async function audit(
   const parsed = SentinelFindings.safeParse(result.structured_output);
   if (parsed.success) findings = parsed.data.findings;
 
+  // Credibility gates (structural): downgrade a self-labelled "confirmed" from a run with no verifier
+  // pass, and force a bug-tier high/critical with no PoC attempt onto the provisional path. Runs on the
+  // evidence of what actually executed — the model cannot self-certify past this.
+  const gate = enforceGates(findings, { subagentTasks, subagentTypes });
+  findings = gate.findings;
+  if (gate.actions.length > 0) {
+    console.warn(
+      `[audit] credibility gate acted on ${gate.actions.length} finding(s)` +
+        `${gate.verified ? "" : " · UNVERIFIED run (no verifier pass)"}: ` +
+        gate.actions.map((a) => `${a.rule}[${a.from}→${a.to}]`).join(", "),
+    );
+  }
+
   let kbCandidate: KBCandidate | undefined;
   if (distillKB) {
     const k = KBCandidateSchema.safeParse(
@@ -248,6 +274,7 @@ export async function audit(
     status: result.subtype === "success" ? "success" : "incomplete",
     findings,
     kbCandidate,
+    gate: { verified: gate.verified, actions: gate.actions },
     metrics: {
       wallMs,
       costUsd: (result.total_cost_usd as number) ?? 0,
