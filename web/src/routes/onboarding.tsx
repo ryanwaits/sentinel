@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { Check, Loader2, ArrowRight, ArrowLeft, Upload } from "lucide-react"
+import { Check, Loader2, ArrowRight, ArrowLeft, Upload, ChevronRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Chip } from "@/components/primitives"
+import { Switch } from "@/components/ui/switch"
+import { Chip, SeverityDot } from "@/components/primitives"
 import { AuditPhases } from "@/components/audit"
 import { networkOf } from "@/lib/stacks-id"
 import { type AuditStatus, getAuditStatus, startAudit } from "@/lib/worker"
@@ -26,7 +27,56 @@ const LIFECYCLE = [
 
 const STEPS = ["Add", "Audit", "Plan", "Live"] as const
 
-const WATCHED_FNS = ["socialize-debt", "system-borrow", "redeem", "register-market"]
+// The monitoring scope, derived from the audit. Every watch traces to something Sentinel checked:
+// a confirmed bug (detection signature), a value path (outflow gate), or a privileged/trust surface.
+// (Demo data for the front door; wires to the audit's KB candidate once the endpoint returns it.)
+type Signal = "detection" | "outflow" | "privileged" | "authorized"
+type Watch = {
+  fn: string
+  signal: Signal
+  severity?: "critical" | "high" | "medium"
+  why: string // shown at a glance
+  rule: string // the alert rule (behind expand)
+  note?: string // what in the audit it traces to (behind expand)
+}
+
+const SIGNAL: Record<Signal, { label: string; tone: "neutral" | "ghost" }> = {
+  detection: { label: "detection signature", tone: "neutral" },
+  outflow: { label: "outflow gate", tone: "neutral" },
+  privileged: { label: "privileged call", tone: "ghost" },
+  authorized: { label: "authorized set", tone: "ghost" },
+}
+
+const DEFAULT_WATCH: Watch[] = [
+  {
+    fn: "socialize-debt",
+    signal: "detection",
+    severity: "critical",
+    why: "A confirmed bug lives here, with a green PoC. Watched for the exploit path being taken.",
+    rule: "Pages the instant this is called on-chain, correlated to the proven finding — a human confirms the precondition before acting.",
+    note: "Finding 1 · critical · reproduced 15/15, airgapped.",
+  },
+  {
+    fn: "redeem",
+    signal: "outflow",
+    why: "The sBTC redemption path, watched for outflows above what's normal for this contract.",
+    rule: "Pages when an sBTC outflow exceeds the learned gate (p99 = 770,115 sats). Tune the threshold anytime.",
+    note: "Baseline learned from 300 real outflows.",
+  },
+  {
+    fn: "system-borrow",
+    signal: "authorized",
+    why: "Trust-gated: an authorized market draws liquidity. An accepted assumption, watched for change.",
+    rule: "Pages if the authorized-market set changes, or liquidity moves to a receiver outside it.",
+    note: "Labeled centralization, not a bug — surfaced once, then suppressed.",
+  },
+  {
+    fn: "register-market",
+    signal: "privileged",
+    why: "Registers a new authorized market — a privilege change to the vault.",
+    rule: "Pages on any new market registration so a human can review the addition.",
+  },
+]
 
 function Stepper({ step }: { step: number }) {
   return (
@@ -279,58 +329,186 @@ function StepAudit({
   )
 }
 
+/** One watched function — glance (fn + signal + one-line why) with the rule + audit trace behind an expand. */
+function WatchRow({ w, on, onToggle }: { w: Watch; on: boolean; onToggle: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={cn("border-t border-border first:border-t-0", !on && "opacity-55")}>
+      <div className="flex items-start gap-3 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+          aria-expanded={open}
+        >
+          <ChevronRight
+            className={cn("mt-[3px] size-[15px] shrink-0 text-faint transition-transform", open && "rotate-90")}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span className="font-mono text-[13.5px] font-medium text-ink-strong">{w.fn}</span>
+              {w.severity && <SeverityDot severity={w.severity} />}
+              <Chip tone={SIGNAL[w.signal].tone}>{SIGNAL[w.signal].label}</Chip>
+            </div>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">{w.why}</p>
+          </div>
+        </button>
+        <Switch checked={on} onCheckedChange={onToggle} size="sm" className="mt-1" aria-label={`Watch ${w.fn}`} />
+      </div>
+      {open && (
+        <div className="grid gap-3 pb-4 pl-[25px]">
+          <div>
+            <div className="font-mono text-[10.5px] uppercase tracking-wider text-faint">Alert rule</div>
+            <p className="mt-1 max-w-[68ch] text-[13px] text-foreground">{w.rule}</p>
+          </div>
+          {w.note && (
+            <div>
+              <div className="font-mono text-[10.5px] uppercase tracking-wider text-faint">From the audit</div>
+              <p className="mt-1 text-[12.5px] text-muted-foreground">{w.note}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Inline "add a function we missed" — collapsed by default, so the default scope stays uncluttered. */
+function AddWatch({ onAdd }: { onAdd: (fn: string, signal: Signal) => void }) {
+  const [open, setOpen] = useState(false)
+  const [fn, setFn] = useState("")
+  const [signal, setSignal] = useState<Signal>("privileged")
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 border-t border-border py-3 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Plus className="size-4" strokeWidth={1.8} /> Watch another function
+      </button>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-border py-3">
+      <Input
+        value={fn}
+        onChange={(e) => setFn(e.target.value)}
+        placeholder="function-name"
+        aria-label="Function to watch"
+        className="h-8 w-[190px] font-mono text-[13px]"
+      />
+      <select
+        value={signal}
+        onChange={(e) => setSignal(e.target.value as Signal)}
+        aria-label="Signal type"
+        className="h-8 rounded-md border border-border bg-card px-2 text-[12.5px] text-foreground outline-none focus-visible:border-primary"
+      >
+        {Object.entries(SIGNAL).map(([k, v]) => (
+          <option key={k} value={k}>
+            {v.label}
+          </option>
+        ))}
+      </select>
+      <Button
+        size="sm"
+        onClick={() => {
+          if (fn.trim()) onAdd(fn.trim(), signal)
+          setFn("")
+          setOpen(false)
+        }}
+      >
+        Add
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
+    </div>
+  )
+}
+
 function StepPlan({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const [items, setItems] = useState(() => DEFAULT_WATCH.map((w) => ({ w, on: true })))
+  const count = items.filter((i) => i.on).length
+
   return (
     <div>
-      <h1 className="text-[23px] font-semibold">Sentinel found 1 bug and drafted your scope</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        This is what monitoring will watch, derived from the audit. Go live now with sensible
-        defaults, and fine-tune anything later in the Monitoring Plan.
+      <h1 className="text-[23px] font-semibold">Your monitoring plan</h1>
+      <p className="mt-2 max-w-[62ch] text-sm text-muted-foreground">
+        Derived from the audit, not generic rules. Every watch traces to something Sentinel checked, a
+        confirmed bug, a trust assumption, or a value path. Adjust anything now or later; nothing pages
+        without a human.
       </p>
 
-      <div className="mt-[22px] grid gap-3">
-        <div className="rounded-xl border border-border bg-secondary px-[17px] py-[15px]">
-          <div className="flex items-center gap-2.5">
-            <span className="text-[13.5px] font-medium text-ink-strong">4 watched functions</span>
-            <span className="flex-1" />
-            <Chip tone="success">
-              <Check className="size-3" strokeWidth={2.4} /> ready
-            </Chip>
-          </div>
-          <div className="mt-[11px] flex flex-wrap gap-[7px]">
-            {WATCHED_FNS.map((fn) => (
-              <Chip key={fn} tone="neutral">
-                {fn}
-              </Chip>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border bg-secondary px-[17px] py-[15px]">
-            <div className="text-[13.5px] font-medium text-ink-strong">1 detection signature</div>
-            <p className="mt-[7px] text-[12.5px] text-muted-foreground">
-              socialize-debt LP loss, with a green PoC. Watches for the bug being exploited.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-secondary px-[17px] py-[15px]">
-            <div className="text-[13.5px] font-medium text-ink-strong">1 outflow baseline</div>
-            <p className="mt-[7px] text-[12.5px] text-muted-foreground">
-              sBTC p99 = 770,115 sats, from 300 real outflows. Suggested as your gate.
-            </p>
-          </div>
-        </div>
+      {/* audit recap — what was checked, said honestly (refuted shown, not hidden) */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-faint">
+        <span>Audited across 8 dimensions</span>
+        <span>·</span>
+        <span className="text-muted-foreground">
+          <b className="font-medium text-foreground tnum">1</b> bug reproduced
+        </span>
+        <span>·</span>
+        <span className="text-muted-foreground">
+          <b className="font-medium text-foreground tnum">1</b> trust assumption
+        </span>
+        <span>·</span>
+        <span>1 refuted, dropped</span>
       </div>
 
-      <div className="mt-7 flex items-center justify-between">
+      {/* the watch list — glance rows, each expandable to its rule + audit trace */}
+      <div className="mt-5 rounded-xl border border-border bg-card/40 px-[18px] py-1">
+        <div className="flex items-center gap-2.5 py-3">
+          <span className="text-[13.5px] font-medium text-ink-strong">
+            Watching {count} function{count === 1 ? "" : "s"}
+          </span>
+          <span className="flex-1" />
+          <Chip tone="success">
+            <Check className="size-3" strokeWidth={2.4} /> ready
+          </Chip>
+        </div>
+        {items.map(({ w, on }, i) => (
+          <WatchRow
+            key={w.fn}
+            w={w}
+            on={on}
+            onToggle={() =>
+              setItems((prev) => prev.map((it, j) => (j === i ? { ...it, on: !it.on } : it)))
+            }
+          />
+        ))}
+        <AddWatch
+          onAdd={(fn, signal) =>
+            setItems((prev) => [
+              ...prev,
+              {
+                w: {
+                  fn,
+                  signal,
+                  why: "Added by you. Watched as an extra privileged call.",
+                  rule: "Pages on any call to this function so a human can review it.",
+                },
+                on: true,
+              },
+            ])
+          }
+        />
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <Button size="lg" variant="ghost" onClick={onBack}>
           <ArrowLeft />
           Back
         </Button>
-        <Button size="lg" onClick={onNext}>
-          Provision and go live
-          <ArrowRight />
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-[12px] text-faint sm:inline">
+            Fine-tune thresholds anytime in the Monitoring Plan.
+          </span>
+          <Button size="lg" onClick={onNext} disabled={count === 0}>
+            Provision and go live
+            <ArrowRight />
+          </Button>
+        </div>
       </div>
     </div>
   )
