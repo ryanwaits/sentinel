@@ -14,23 +14,39 @@
  *   - contract_call { contractId, functionName, caller } — the privileged fns + admin-key watch.
  *
  * Provenance — topics + fns are pinned to the reviewed bytes:
- *   stacks-network/stacks-core @ pox-wf-integration, commit d78f15a8f37b764e204b65c6faa211ee06ab21ed
- *   stackslib/src/chainstate/stacks/boot/pox-5.clar (3,829 lines, Clarity 6).
- * If the contract churns before the fork (it changed once — boost removal), re-pin here.
+ *   stacks-network/stacks-core @ tag 4.0.1 (FINAL Epoch-4.0 release, 2026-07-15),
+ *   commit 62e03cc5551bfc574223c2b78ce04ceca30cec37
+ *   stackslib/src/chainstate/stacks/boot/pox-5.clar (3,845 lines, Clarity 6).
+ * Diff vs prior pin d78f15a8 (pox-wf-integration): topics + public/private fn sets IDENTICAL;
+ * deltas are (1) bond-admin/pause-admin now init to the real principal
+ * SP72DMR3MJKS7RVBY33JVV7EEJSQ1PYDVKDP10FX (not the boot placeholder), (2) new
+ * BITCOIN_LOCKTIME_THRESHOLD u500000000 assert on unlock-burn-height (ERR_INVALID_UNLOCK_HEIGHT),
+ * (3) reward-settlement gas refactors (zero-shares settle skip, claim-path recompute) — same
+ * return shapes. 4.0.1 is the shipped fork code; no further churn expected before activation.
  *
  *   bun run monitoring/pox5-bond-ops.ts [contractId]   # print the plan (config only, no account calls)
  */
+import type { Invariant } from "./invariant";
 import type { SubSpec } from "./sources/trigger-source";
 import { ruleKeyFor, ruleKeyForPrint } from "./sub-store";
 
 /** The commit whose topics/fns this config is pinned to (matches reports/pox-5-pre-activation-review.md). */
-export const POX5_REVIEW_SHA = "d78f15a8f37b764e204b65c6faa211ee06ab21ed";
+export const POX5_REVIEW_SHA = "62e03cc5551bfc574223c2b78ce04ceca30cec37"; // tag 4.0.1
 
 /**
- * Placeholder boot contractId. pox-5 auto-deploys under the boot principal at Epoch 4.0
- * (`SP000000000000000000002Q6VF78` is the admin/boot principal the contract itself initializes to,
- * L345/L350). Until a testnet boot address exists, the monitor is exercised against a caller-supplied
- * FAKE id — this constant only documents the eventual mainnet id; do NOT `--apply` against it.
+ * The genesis holder of BOTH admin roles in shipped 4.0.1 bytes (`bond-admin` L348,
+ * `pause-admin` L353) — a real principal, single-sig (SP) format, shipped under the source's own
+ * "TODO: this should be set to some predefined multisig" comment. Pass it as `adminKeys` to
+ * `pox5BondOpsPlan` for the caller-scoped watch; re-verify at T+0 via the data-var baseline read.
+ */
+export const POX5_GENESIS_ADMIN = "SP72DMR3MJKS7RVBY33JVV7EEJSQ1PYDVKDP10FX";
+
+/**
+ * Boot contractId. pox-5 auto-deploys under the boot principal `SP000000000000000000002Q6VF78`
+ * when Bitcoin crosses 960,230 (~2026-07-29/30). NOTE: the contract's admin data-vars do NOT
+ * initialize to the boot principal — shipped 4.0.1 inits both to `POX5_GENESIS_ADMIN` (L348/L353).
+ * Until activation the monitor is exercised against a caller-supplied FAKE id — do NOT `--apply`
+ * against this id before the contract exists.
  */
 export const POX5_PLACEHOLDER_CONTRACT_ID = "SP000000000000000000002Q6VF78.pox-5";
 
@@ -94,11 +110,84 @@ export const POX5_PRINT_TOPICS: readonly { topic: string; priority: Priority; no
  * call fires even on a path that doesn't reach its print). Pinned to `define-public` in the source.
  */
 export const POX5_ADMIN_FNS: readonly { fn: string; priority: Priority; note: string }[] = [
-  { fn: "pause-rewards", priority: 1, note: "permanent pause — no unpause exists (L484)" },
-  { fn: "set-bond-admin", priority: 1, note: "transfer bond-admin role (L448)" },
-  { fn: "set-pause-admin", priority: 1, note: "transfer pause-admin role (L467)" },
-  { fn: "announce-l1-early-exit", priority: 1, note: "staker announces L1 early exit (L1193)" },
+  { fn: "pause-rewards", priority: 1, note: "permanent pause — no unpause exists (L487)" },
+  { fn: "set-bond-admin", priority: 1, note: "transfer bond-admin role (L451)" },
+  { fn: "set-pause-admin", priority: 1, note: "transfer pause-admin role (L470)" },
+  { fn: "announce-l1-early-exit", priority: 1, note: "staker announces L1 early exit (L1196)" },
   { fn: "set-burnchain-parameters", priority: 1, note: "burnchain parameter setter" },
+] as const;
+
+/**
+ * sBTC token pox-5 moves rewards/reserve in (asset id = `<contract>::<token-name>`, from the source's
+ * `with-ft 'SM3…sbtc-token "sbtc-token"`). Used by the reserve conservation invariants below.
+ */
+export const POX5_SBTC_ASSET = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token";
+
+/**
+ * Conservation invariants — the THIRD lane (see monitoring/invariant.ts). pox-5's reserve draws
+ * (`transfer-from-reserve`) and stranded-sweeps (`transfer-stranded-rewards`) are BOTH `define-private`
+ * + consensus-invoked: no `contract_call`, no `print`, so the reactive subscriptions above are blind to
+ * them. These poll on-chain state and assert a conservation property instead. Evaluated post-activation
+ * (reads 404 until the boot contract exists → surfaced as `unreadable`, the honest degraded signal).
+ *
+ * `Invariant` is imported as a TYPE only (no runtime dep on invariant.ts → no import cycle; invariant.ts
+ * dynamically imports THIS module for its CLI registry).
+ */
+export const POX5_INVARIANTS: readonly Invariant[] = [
+  {
+    // reserve-balance is incremented in reachable code ONLY (calculate-rewards); the sole decrement is
+    // the private/consensus transfer-from-reserve. So any observed DECREASE = a consensus reserve draw
+    // occurred — the exact invisible-money-movement event this lane exists to catch. Expected-but-
+    // newsworthy → centralization label, not a bug.
+    id: "pox5-reserve-monotonic",
+    contractId: POX5_PLACEHOLDER_CONTRACT_ID,
+    description:
+      "reserve-balance is write-only in reachable code; a decrease means a consensus/hard-fork draw",
+    kind: "monotonic",
+    quantity: "reserveBalance",
+    direction: "non-decreasing",
+    severity: "high",
+    findingClass: "centralization",
+    observe: [
+      {
+        key: "reserveBalance",
+        kind: "data-var-uint",
+        contractId: POX5_PLACEHOLDER_CONTRACT_ID,
+        varName: "reserve-balance",
+      },
+    ],
+  },
+  {
+    // The contract's actual sBTC holdings must stay ≥ the reserve it claims to hold (holdings also cover
+    // unclaimed rewards, so it's a floor, not an equality). A drop BELOW reserve-balance = sBTC left
+    // without the ledger decrementing (transfer-stranded-rewards, or an exploit) → bug-tier.
+    id: "pox5-sbtc-backing-floor",
+    contractId: POX5_PLACEHOLDER_CONTRACT_ID,
+    description: "pox-5 sBTC balance must be ≥ reserve-balance (reserve is a subset of holdings)",
+    kind: "conservation",
+    total: "sbtcBalance",
+    parts: ["reserveBalance"],
+    tolerance: 0n,
+    mode: "floor",
+    severity: "critical",
+    findingClass: "bug",
+    observe: [
+      {
+        key: "sbtcBalance",
+        kind: "read-only-uint",
+        contractId: POX5_SBTC_ASSET,
+        fn: "get-balance",
+        args: [{ principal: POX5_PLACEHOLDER_CONTRACT_ID }],
+      },
+      {
+        key: "reserveBalance",
+        kind: "read-only-uint",
+        contractId: POX5_PLACEHOLDER_CONTRACT_ID,
+        fn: "get-reserve-balance",
+        args: [],
+      },
+    ],
+  },
 ] as const;
 
 /** One planned subscription: the reconcilable `SubSpec` + its deterministic ruleKey + why we watch it. */
@@ -115,8 +204,8 @@ export type Pox5PlanOptions = {
   priorityOnly?: boolean;
   /**
    * Admin principals to watch across ALL calls to the contract (caller-scoped contract_call, no
-   * functionName) — "anything this key touches". Empty by default: at genesis the admin keys are
-   * `SP000000000000000000002Q6VF78`; promote the real keys here once known.
+   * functionName) — "anything this key touches". Empty by default; pass `POX5_GENESIS_ADMIN`
+   * (holds BOTH roles in shipped 4.0.1) and re-verify against the T+0 data-var baseline read.
    */
   adminKeys?: string[];
 };
