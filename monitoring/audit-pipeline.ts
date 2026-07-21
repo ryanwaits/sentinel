@@ -7,8 +7,11 @@
  * (audits take minutes); the bridge fires it and returns 202.
  */
 import { audit } from "../engine/audit";
+import type { Adjudication } from "./adjudication";
 import { adjudicateFindings } from "./adjudication";
+import { tierForArchetype } from "./config";
 import { loadRecord } from "./kb";
+import { networkOf } from "./network";
 import { notify } from "./notify";
 import { reconcile, TIER_ESTIMATE_USD, type Tier } from "./spend-ceiling";
 import { recordSession } from "./trigger-state";
@@ -70,4 +73,37 @@ export async function runTrigger(ctx: TriggerContext): Promise<void> {
   console.log(
     `[pipeline] ${ctx.watchedContractId}.${ctx.fn} → audit ${ctx.target} (${ctx.tier}, $${result.metrics.costUsd}, ${result.findings.length} findings) → ${adjudication.alertLevel} | session ${sessionId}`,
   );
+}
+
+/**
+ * On-demand audit request (the "bring your contract" front-door path) — audit → adjudicate → notify,
+ * NOT trigger-driven. Reuses the same pipeline as `runTrigger`: a KB record (if the contract has one)
+ * makes it context-aware + supplies waivers; the network is auto-derived from the address. `deps.audit`
+ * is injectable so this is testable without real model spend. The caller (`POST /audit`) reserves the
+ * spend estimate BEFORE calling (cap-before-spend / 429); this true-ups the real cost after.
+ */
+export type AuditRequest = { contractId: string; tier?: Tier; client?: string };
+
+export async function runAuditRequest(
+  req: AuditRequest,
+  deps: { audit: typeof audit } = { audit },
+): Promise<Adjudication> {
+  const kb = loadRecord(req.contractId);
+  const tier: Tier = req.tier ?? (kb ? tierForArchetype(kb.archetype) : "monitor");
+  const result = await deps.audit(req.contractId, { tier, kb });
+  const sessionId = result.sessionId ?? `audit-request:${req.contractId}`;
+  const adjudication = adjudicateFindings({
+    sessionId,
+    contractId: req.contractId,
+    findings: result.findings,
+    tokenCostUsd: result.metrics.costUsd,
+    waivers: kb?.waivers,
+  });
+  await notify(adjudication);
+  if (result.metrics.costUsd > 0) reconcile(TIER_ESTIMATE_USD[tier], result.metrics.costUsd);
+  console.log(
+    `[audit-request] ${req.contractId} (${tier}, network=${networkOf(req.contractId)}, ` +
+      `$${result.metrics.costUsd}, ${result.findings.length} findings) → ${adjudication.alertLevel} | session ${sessionId}`,
+  );
+  return adjudication;
 }

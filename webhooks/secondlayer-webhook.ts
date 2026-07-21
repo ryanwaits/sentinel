@@ -18,14 +18,15 @@
  * Env: SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret); ANTHROPIC_API_KEY + STACKS_NODE_URL
  *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
-import { runTrigger } from "../monitoring/audit-pipeline";
+import { type AuditRequest, runAuditRequest, runTrigger } from "../monitoring/audit-pipeline";
 import { routeForTriggerClass } from "../monitoring/config";
 import { buildDirective, tierFor } from "../monitoring/directive";
 import { triageTrigger } from "../monitoring/incident-triage";
 import { deriveConfig } from "../monitoring/kb";
+import { isValidContractId, networkOf } from "../monitoring/network";
 import { type ChainEventBody, classify } from "../monitoring/prefilter";
 import { verifySignature } from "../monitoring/sources/trigger-source";
-import { reserve } from "../monitoring/spend-ceiling";
+import { reserve, type Tier } from "../monitoring/spend-ceiling";
 import { getByRuleKey } from "../monitoring/sub-store";
 import { dedupKey, inDebounce, isDuplicate, markDispatched } from "../monitoring/trigger-state";
 
@@ -344,13 +345,64 @@ export async function handle(req: Request): Promise<Response> {
   return new Response("queued", { status: 202 });
 }
 
+/**
+ * On-demand audit ingress (the "bring your contract" front door): `POST /audit {contractId, tier?}`.
+ * Validates the id via `@secondlayer/stacks`, reserves the spend estimate (cap-before-spend → 429),
+ * then fires the audit ASYNC (sweeps run minutes) and returns 202 — the verdict flows to `notify`.
+ * Network is auto-derived from the address (Tier 3.1). NOT signature-gated: this is a first-party
+ * product surface, not a webhook — front the worker with the LB/auth in prod.
+ */
+export async function handleAuditRequest(
+  req: Request,
+  run: (r: AuditRequest) => Promise<unknown> = runAuditRequest,
+): Promise<Response> {
+  let body: { contractId?: string; tier?: string; client?: string };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return Response.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const contractId = body.contractId?.trim() ?? "";
+  if (!isValidContractId(contractId)) {
+    return Response.json(
+      { error: "contractId must be a valid address.contract-name" },
+      { status: 400 },
+    );
+  }
+  const tier: Tier = body.tier === "deep" ? "deep" : "monitor";
+  const gate = await reserve(tier);
+  if (!gate.allowed) {
+    return Response.json({ error: `spend ceiling: ${gate.reason}` }, { status: 429 });
+  }
+
+  const request: AuditRequest = { contractId, tier, client: body.client };
+  const sessionId = `audit-request:${contractId}`;
+  // Fire-and-forget: audits take minutes. Result → notify. (Durable queue is a Tier-2 hardening item.)
+  run(request).catch((e) =>
+    console.error(`[audit-request] ${contractId} failed: ${(e as Error).message}`),
+  );
+  console.log(`[audit-request] queued ${contractId} (${tier}, ${networkOf(contractId)})`);
+  return Response.json(
+    { status: "running", sessionId, contractId, tier, network: networkOf(contractId) },
+    { status: 202 },
+  );
+}
+
 // Minimal Bun server when run directly.
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
   Bun.serve({
     port,
-    fetch: (req) =>
-      req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 }),
+    fetch: (req) => {
+      const { pathname } = new URL(req.url);
+      // Liveness probe for the container host / LB (RUNBOOK health check).
+      if (req.method === "GET" && pathname === "/health") {
+        return Response.json({ ok: true, service: "sentinel-bridge" });
+      }
+      // On-demand audit front door.
+      if (req.method === "POST" && pathname === "/audit") return handleAuditRequest(req);
+      return req.method === "POST" ? handle(req) : new Response("POST only", { status: 405 });
+    },
   });
   console.log(
     `secondlayer-webhook bridge listening on :${port} → audit() pipeline (direct Anthropic)`,
