@@ -13,7 +13,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     ports:
-      - "3001:3001"
+      # Host port is configurable (SENTINEL_BRIDGE_PORT) to dodge a local dev-server conflict on 3001;
+      # the container always listens on 3001. In prod the reverse proxy / LB maps 443 → 3001.
+      - "${SENTINEL_BRIDGE_PORT:-3001}:3001"
     env_file:
       - ../.env.local
     environment:
@@ -38,6 +40,24 @@ services:
       - sentinel-data:/data
       # Same-path bind mount so inline-PoC files the worker writes are visible to the host daemon.
       - /tmp/sentinel-sandbox:/tmp/sentinel-sandbox
+    restart: unless-stopped
+
+  # The poll lane's cadence — runs the invariant registry → adjudicate → notify on an interval.
+  # Same image, no ingress and no docker.sock (invariants don't run PoCs), shares the durable sink
+  # with the bridge (warn-once state + snapshots). Swap for a platform cron hitting a /tick later.
+  sentinel-scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["bun", "run", "monitoring/scheduler.ts"]
+    env_file:
+      - ../.env.local
+    environment:
+      - SENTINEL_SINK_DIR=/data/.sentinel
+      # Evaluation cadence (ms). Default 10m; tune per reward-cycle / reserve-watch needs.
+      - SENTINEL_SCHEDULE_INTERVAL_MS=${SENTINEL_SCHEDULE_INTERVAL_MS:-600000}
+    volumes:
+      - sentinel-data:/data
     restart: unless-stopped
 
 volumes:

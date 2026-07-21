@@ -11,6 +11,8 @@
     "audit": "bun run engine/run.ts",
     "distill": "bun run engine/distill.ts",
     "baseline": "bun run monitoring/baseline.ts",
+    "invariant": "bun run monitoring/invariant.ts",
+    "scheduler": "bun run monitoring/scheduler.ts",
     "pox5:config": "bun run monitoring/pox5-bond-ops.ts",
     "lint": "biome check agent engine monitoring webhooks simnet subgraphs",
     "format": "biome check --write agent engine monitoring webhooks simnet subgraphs",
