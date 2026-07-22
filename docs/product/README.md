@@ -26,6 +26,10 @@ for the airgapped PoC sandbox); scaffolded in `deploy/`.
 
 Read together: **#1 fills the audit→config gap, #2 is the substrate, #1's output is what #3 renders.**
 
+Decision-model lens (cross-cutting): [audit-gates.md](./audit-gates.md) — the three audit gates
+(**Scope · Proof · Disclosure**) and where each sits between **fully-auto** (the shipped monitoring path)
+and **client-interactive** choice points (to build, on top of #3's screens). No managed-retainer mode.
+
 ## Phased build order
 - **Phase 0 — DONE:** monitoring backend M0–M5 (primitives proven; the M5 live run also surfaced the
   run-reader observability gap → drives the run-store in Phase 2).
