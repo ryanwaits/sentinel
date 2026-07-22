@@ -24,3 +24,14 @@ simnet/history.json
 
 # vercel project link
 .vercel/
+
+# Engagement evidence + coordinated-disclosure artifacts stay LOCAL.
+# Never commit a target-specific PoC/harness or a disclosure draft before a fix ships
+# (coordinated-disclosure hygiene). Promote to git only once disclosed/fixed.
+docs/findings/
+simnet/poc/hermetica-*.ts
+simnet/contracts/token-hbtc.clar
+simnet/contracts/state-hbtc.clar
+simnet/contracts/blacklist.clar
+simnet/contracts/vault-hbtc.clar
+simnet/contracts/vault-hbtc-fixed.clar
