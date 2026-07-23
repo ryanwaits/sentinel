@@ -30,6 +30,7 @@ simnet/history.json
 # (coordinated-disclosure hygiene). Promote to git only once disclosed/fixed.
 docs/findings/
 simnet/poc/hermetica-*.ts
+simnet/hermetica-fork/
 simnet/contracts/token-hbtc.clar
 simnet/contracts/state-hbtc.clar
 simnet/contracts/blacklist.clar

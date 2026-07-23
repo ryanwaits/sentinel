@@ -9,7 +9,7 @@
         "@secondlayer/sdk": "^6.25.1",
         "@secondlayer/stacks": "^2.11.0",
         "@secondlayer/subgraphs": "^3.16.0",
-        "@stacks/clarinet-sdk": "^3.20.0",
+        "@stacks/clarinet-sdk": "^3.22.0",
         "zod": "^4.4.3",
       },
       "devDependencies": {
@@ -96,9 +96,9 @@
 
     "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
 
-    "@stacks/clarinet-sdk": ["@stacks/clarinet-sdk@3.20.0", "", { "dependencies": { "@stacks/clarinet-sdk-wasm": "3.20.0", "@stacks/transactions": "7.4.0", "kolorist": "1.8.0", "prompts": "2.4.2", "yargs": "18.0.0" } }, "sha512-pITFBfCXoiwn2XmS30nhYDPWSbXGiGgqEWYIHslH9NDYPNo1lctjydR/dUYqOOxa+49hJk4ye8R+heZyMLydrA=="],
+    "@stacks/clarinet-sdk": ["@stacks/clarinet-sdk@3.22.0", "", { "dependencies": { "@stacks/clarinet-sdk-wasm": "3.22.0", "@stacks/transactions": "7.4.0", "kolorist": "1.8.0", "prompts": "2.4.2", "yargs": "18.0.0" } }, "sha512-4UvzSC6JyAgzHNXbeYDyL4jvnf7J/WBsL1MclKPr6dxl7ozRlgcGtym7Sx6aDeM4qgqT5z2W4cOOTCaA6rNoBQ=="],
 
-    "@stacks/clarinet-sdk-wasm": ["@stacks/clarinet-sdk-wasm@3.20.0", "", {}, "sha512-UJsepeAidFpPSffF283HZMtlOk5pGPaUS7OmBQgOC8tN5jWeADqYl97m61XdXi43pI/jdaKLuLVyktJkaOfJOw=="],
+    "@stacks/clarinet-sdk-wasm": ["@stacks/clarinet-sdk-wasm@3.22.0", "", {}, "sha512-deejlyxB/PvDLseGCnayTDCmN88C2uIM4AglFRFJp+SOhEjYv5qbaw0F1uVXTpRM9w8B3N96vZMTzUH6kp/NlA=="],
 
     "@stacks/common": ["@stacks/common@7.3.1", "", {}, "sha512-29ANTFcSSlXnGQlgDVWg7OQ74lgQhu3x8JkeN19Q+UE/1lbQrzcctgPHG74XHjWNp8NPBqskUYA8/HLgIKuKNQ=="],
 
