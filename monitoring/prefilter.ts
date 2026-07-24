@@ -25,7 +25,7 @@ import type { SensitiveFn } from "./config";
 
 /** The decoded chain event carried under the webhook envelope's `event`. The bridge normalizes the
  *  raw delivery into this flat shape (secondlayer uses `event_type` + sometimes a nested `payload`;
- *  see normalizeEvent in the webhook bridge), so downstream code reads a canonical `type` + flat fields. */
+ *  see toEventBody in the webhook bridge), so downstream code reads a canonical `type` + flat fields. */
 export type ChainEventBody = {
   type?: string;
   /** Raw secondlayer discriminator (`ft_transfer`/`contract_call`/…); normalized into `type`. */
@@ -48,7 +48,7 @@ export type ChainEventBody = {
   recipient?: string;
   /** Per-event ordinal within the tx — ONE tx emits many transfer events (e.g. a swap → 3 outflows),
    *  each with a distinct event_index. Load-bearing for dedup: without it, same-tx outflows collapse to
-   *  one key and we drop all but the first. Set by the bridge's normalizeEvent from the delivery. */
+   *  one key and we drop all but the first. Set by the bridge's toEventBody from the decoded delivery. */
   event_index?: number;
 };
 
