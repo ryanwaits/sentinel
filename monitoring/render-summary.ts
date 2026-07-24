@@ -27,7 +27,8 @@ Rules:
 - Plain words over jargon: "the user's funds get stuck", not "denial of access to principal".
 - Name the ONE thing worth acting on. State severity in a clause; one honest caveat, then move on.
 - Be honest about uncertainty: if a finding is "uncertain" or a read was degraded, say so plainly —
-  never smooth it into "clean".
+  never smooth it into "clean". A monitoring correlation is "looks like", not a reproduced exploit.
+- Never imply Sentinel took any action — it routes intent to a human; it never acts on-chain or discloses.
 - If there's a fix, one line naming the change. Do NOT narrate the PoC.
 - Active voice. No hedging ("we would note that"), no em dashes.
 Output the summary prose only — no headings, no markdown fences.`;
@@ -127,9 +128,10 @@ export function templateSummary(adj: Adjudication): string {
   return lines.join("\n");
 }
 
-/** The verdict-safe renderer: never throws, never spends under mock. */
+/** The verdict-safe renderer: never throws, never spends under mock, and can't call the model without a
+ *  key — so mock, tests, and keyless dev all deterministically get the template; prod gets the LLM voice. */
 export async function renderSummary(adj: Adjudication): Promise<string> {
-  if (process.env.SENTINEL_AUDIT_MOCK) return templateSummary(adj);
+  if (process.env.SENTINEL_AUDIT_MOCK || !process.env.ANTHROPIC_API_KEY) return templateSummary(adj);
   try {
     return await llmRenderSummary(adj);
   } catch (e) {

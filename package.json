@@ -7,7 +7,7 @@
   "scripts": {
     "poc:finding-1": "bun run simnet/poc/finding-1.ts",
     "typecheck": "tsc --noEmit",
-    "test": "SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/ deploy/",
+    "test": "SENTINEL_AUDIT_MOCK=1 SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/ deploy/",
     "audit": "bun run engine/run.ts",
     "discover": "bun run engine/discover.ts",
     "distill": "bun run engine/distill.ts",

@@ -17,6 +17,7 @@ import { createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Adjudication } from "./adjudication";
+import { renderSummary } from "./render-summary";
 
 const STATE_DIR = process.env.SENTINEL_SINK_DIR ?? join(process.cwd(), ".sentinel");
 const STATE_PATH = join(STATE_DIR, "notifications.json");
@@ -55,11 +56,13 @@ export type NotifyResult = {
   promoted?: boolean;
 };
 
-/** The internal alert payload (never a disclosure action). */
-function buildPayload(adj: Adjudication, level: string) {
+/** The internal alert payload (never a disclosure action). `summary` is the house-voice prose the human
+ *  being paged reads first; the structured fields below remain for machine routing. */
+export function buildPayload(adj: Adjudication, level: string, summary: string) {
   return {
     event: "sentinel_alert",
     level,
+    summary,
     sessionId: adj.sessionId,
     contractId: adj.contractId,
     severity: adj.severity,
@@ -96,12 +99,17 @@ export function signStandardWebhook(
   return { "webhook-id": id, "webhook-timestamp": String(tsSec), "webhook-signature": `v1,${sig}` };
 }
 
-async function emit(adj: Adjudication, level: string): Promise<void> {
-  const payload = buildPayload(adj, level);
+async function emit(
+  adj: Adjudication,
+  level: string,
+  render: (adj: Adjudication) => Promise<string>,
+): Promise<void> {
+  const summary = await render(adj); // house-voice prose; never throws (falls back to a template)
+  const payload = buildPayload(adj, level, summary);
   // eslint-disable-next-line no-console
   console.warn(
     `[notify] ${level} — ${adj.contractId} ${adj.severity}/${adj.class} poc=${adj.pocStatus}` +
-      `${adj.provisional ? " (provisional)" : ""} | ${adj.recommendedAction} | session ${adj.sessionId}`,
+      `${adj.provisional ? " (provisional)" : ""} | ${summary.split("\n")[0]} | session ${adj.sessionId}`,
   );
   const url = process.env.SENTINEL_NOTIFY_URL; // internal channel only
   if (!url) return;
@@ -129,7 +137,10 @@ async function emit(adj: Adjudication, level: string): Promise<void> {
  * Route an adjudication. Idempotent per session (warn-once), except a provisional→green promotion.
  * Returns whether an alert was sent and why.
  */
-export async function notify(adj: Adjudication): Promise<NotifyResult> {
+export async function notify(
+  adj: Adjudication,
+  render: (adj: Adjudication) => Promise<string> = renderSummary,
+): Promise<NotifyResult> {
   const state = load();
   const prior = state[adj.sessionId];
 
@@ -143,7 +154,7 @@ export async function notify(adj: Adjudication): Promise<NotifyResult> {
   }
 
   const level = promotion ? "PROMOTED" : adj.alertLevel.toUpperCase();
-  await emit(adj, level);
+  await emit(adj, level, render); // render only happens here — no summary work for skipped alerts
 
   state[adj.sessionId] = {
     sessionId: adj.sessionId,
