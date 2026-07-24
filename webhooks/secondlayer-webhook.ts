@@ -18,6 +18,11 @@
  * Env: SECONDLAYER_WEBHOOK_SECRET (single-sub fallback secret); ANTHROPIC_API_KEY + STACKS_NODE_URL
  *      for the audit; SENTINEL_TIMELOCK_BLOCKS for the deadline watchdog.
  */
+import {
+  type ChainApplyEnvelope,
+  type ChainWebhookDelivery,
+  decodeChainWebhook,
+} from "@secondlayer/sdk";
 import { type Adjudication, adjudicateFindings } from "../monitoring/adjudication";
 import { type AuditRequest, runAuditRequest, runTrigger } from "../monitoring/audit-pipeline";
 import {
@@ -44,30 +49,9 @@ const FALLBACK_SECRET = process.env.SECONDLAYER_WEBHOOK_SECRET ?? "";
 /** Representative governance timelock window (blocks) for the deadline watchdog. ~1 day at ~10min/block. */
 const TIMELOCK_BLOCKS = Number(process.env.SENTINEL_TIMELOCK_BLOCKS ?? 144);
 
-/** The raw event as delivered — REAL secondlayer deliveries nest the fields under `event.data` and set
- *  `type: "<trigger>_event"`; synthetic/older deliveries are a flat ChainEventBody. */
-type RawEvent = ChainEventBody & { data?: Record<string, unknown> };
-
-/** The chain delivery, flattened to what the bridge works with (action/tx/block/trigger/event). */
-type ChainDelivery = {
-  action?: "apply" | "rollback";
-  trigger?: string;
-  block_height?: number;
-  /** Block hash — folded into the dedup key so the same tx re-mined in a different block (reorg) is
-   *  re-processed instead of deduped. Optional: absent → the key degrades to today's behavior. */
-  block_hash?: string;
-  tx_id?: string;
-  event?: RawEvent;
-};
-
-/** The raw POST body: REAL secondlayer wraps the delivery under `{ type, data: {...} }`; synthetic/older
- *  deliveries are the flat ChainDelivery. `unwrapDelivery` collapses both to a ChainDelivery. */
-type ChainWebhook = ChainDelivery & { type?: string; data?: ChainDelivery };
-
-/** Collapse the real `{type, data:{...}}` envelope to a flat delivery; pass a flat one through. */
-function unwrapDelivery(raw: ChainWebhook): ChainDelivery {
-  return raw.data ?? raw;
-}
+/** The apply-envelope metadata the dispatch path needs (tx/block/trigger). `ChainApplyEnvelope.data`
+ *  is fully typed by the sdk; this is the subset `handleTransfer` + the audit dispatch read. */
+type ApplyMeta = Pick<ChainApplyEnvelope, "tx_id" | "block_height" | "block_hash" | "trigger">;
 
 /**
  * Durable event dedup (tx-based) covers re-delivery; this in-memory set short-circuits an obvious
@@ -91,41 +75,50 @@ function ruleKeyFromPath(url: string): string {
 }
 
 /**
- * Normalize a raw chain-subscription delivery into a flat ChainEventBody. secondlayer's event model
- * uses `event_type` as the discriminator and MAY nest fields under `payload` (Streams-shape) or carry
- * them flat (Index-shape). We canonicalise both here so downstream code reads one shape. (Exact
- * field-names confirm on the first live ft/stx_transfer delivery — this handles both documented shapes.)
+ * Map a typed apply envelope (`decodeChainWebhook` output) → our internal `ChainEventBody`. The sdk's
+ * discriminated union already handled every trap the old hand-rolled normalizer guessed at (nested vs
+ * flat, the `_event` suffix, `contract_id` vs `contract_identifier`). We discriminate the two event
+ * families the monitor cares about: a transfer-family `ChainEventEnvelope` (carries `event_index` + a
+ * nested `data`) vs a tx-level `ChainTxLevelEvent` (flat, `function_name`, no `event_index`).
  */
-function normalizeEvent(
-  rawEvent: RawEvent | undefined,
-  trigger?: string,
-): ChainEventBody | undefined {
-  if (!rawEvent) return undefined;
-  // REAL deliveries nest the fields under `event.data`; synthetic ones are flat.
-  const f = (rawEvent.data ?? rawEvent) as Partial<ChainEventBody> & {
-    event_type?: string;
-    contract_identifier?: string;
+function toEventBody(data: { trigger: string; event: unknown }): ChainEventBody {
+  // The envelope (trigger/tx/block) stays fully typed; the event's inner fields are polymorphic per
+  // trigger and TS can't correlate the generic `trigger`↔`event` pairing through a runtime check, so we
+  // read them structurally — decodeChainWebhook already validated the delivery shape.
+  const ev = data.event as {
+    event_index?: number;
+    data?: { sender?: string; recipient?: string; amount?: string; asset_identifier?: string };
+    sender?: string;
+    status?: string;
+    contract_id?: string | null;
+    function_name?: string | null;
+    function_args?: string[] | null;
+    result_hex?: string | null;
   };
-  // Canonical type: the delivery `trigger` ("stx_transfer") wins; else strip the "_event" suffix off
-  // the event's own type ("stx_transfer_event"); else event_type.
-  const rawType = trigger ?? rawEvent.event_type ?? rawEvent.type ?? f.event_type;
+  // transfer-family carries event_index + a nested `data`; tx-level (contract_call/deploy) is flat.
+  if (ev.event_index != null && ev.data) {
+    return {
+      type: data.trigger, // "stx_transfer" | "ft_transfer" | …
+      event_index: ev.event_index, // load-bearing for per-event transfer dedup
+      sender: ev.data.sender,
+      recipient: ev.data.recipient,
+      amount: ev.data.amount,
+      asset_identifier: ev.data.asset_identifier,
+    };
+  }
   return {
-    type: rawType?.replace(/_event$/, ""),
-    contract_id: f.contract_id ?? f.contract_identifier,
-    function_name: f.function_name,
-    function_args: f.function_args,
-    sender: f.sender,
-    asset_identifier: f.asset_identifier,
-    amount: f.amount,
-    recipient: f.recipient,
-    // event_index lives on the event object itself (rawEvent), not the nested `data` (f); keep the
-    // fallback for the flat/synthetic shape. Load-bearing for per-event transfer dedup.
-    event_index: rawEvent.event_index ?? f.event_index,
+    type: data.trigger, // "contract_call" | "contract_deploy" | (sbtc/other → no contract/fn → no-op)
+    contract_id: ev.contract_id ?? undefined,
+    function_name: ev.function_name ?? undefined,
+    function_args: ev.function_args ?? undefined,
+    sender: ev.sender,
+    status: ev.status,
+    result_hex: ev.result_hex ?? undefined,
   };
 }
 
 /** A transfer-trigger event (ft/stx outflow sub) carries no function_name; the watched contract is
- *  the SENDER (we scope subs to sender=contract). Discriminate on the normalized `type`. */
+ *  the SENDER (we scope subs to sender=contract). Discriminate on the mapped `type`. */
 function isTransferEvent(event: ChainEventBody): boolean {
   return event.type === "ft_transfer" || event.type === "stx_transfer";
 }
@@ -136,7 +129,7 @@ function isTransferEvent(event: ChainEventBody): boolean {
  * reserve — the code is unchanged, nothing to re-audit). Detection, not prevention.
  */
 async function handleTransfer(
-  delivery: ChainDelivery,
+  delivery: ApplyMeta,
   event: ChainEventBody,
   webhookId: string | undefined,
 ): Promise<Response> {
@@ -212,36 +205,42 @@ export async function handle(req: Request): Promise<Response> {
   // 2) short-circuit an already-handled delivery retry.
   if (alreadyHandled(webhookId)) return new Response("duplicate", { status: 200 });
 
-  const payload = JSON.parse(raw) as ChainWebhook;
-
-  // Diagnostic: dump the raw delivered event shape (SENTINEL_DEBUG_RAW) — used to confirm the exact
-  // secondlayer transfer webhook payload on a first live delivery. Off by default.
-  if (process.env.SENTINEL_DEBUG_RAW) {
-    console.log(`[bridge:raw] ${JSON.stringify(payload)}`);
+  // Decode + validate the delivery via the sdk's typed decoder (throws on a non-chain-webhook body).
+  let delivery: ChainWebhookDelivery;
+  try {
+    delivery = decodeChainWebhook(raw);
+  } catch (err) {
+    console.warn(`[bridge] malformed delivery: ${(err as Error).message}`);
+    return new Response("malformed chain-webhook delivery", { status: 400 });
   }
-  // Collapse the real `{type, data:{...}}` envelope (or a flat synthetic body) to a flat delivery.
-  const delivery = unwrapDelivery(payload);
+  if (process.env.SENTINEL_DEBUG_RAW) console.log(`[bridge:raw] ${raw}`);
 
+  // Discriminate on the outer delivery type (test ping / reorg / apply) — narrows `delivery.data`.
+  if (delivery.type === "chain.test.apply") {
+    // Subscription verification ping, not a chain event — ack, never dispatch.
+    markHandled(webhookId);
+    return new Response("test delivery acked", { status: 200 });
+  }
   // 3) reorg — an orphaned tx must NOT fire an audit (real retraction of an in-flight adjudication
   //    is M4). Acknowledge + drop.
-  if (delivery.action === "rollback") {
-    console.log(
-      `[bridge] rollback acked: tx ${delivery.tx_id ?? "?"} @ ${delivery.block_height ?? "?"} — no dispatch`,
-    );
+  if (delivery.type === "chain.reorg.rollback") {
+    console.log(`[bridge] rollback acked: fork @ ${delivery.data.fork_point_height} — no dispatch`);
     markHandled(webhookId);
     return new Response("rollback acked", { status: 204 });
   }
 
-  const event = normalizeEvent(delivery.event, delivery.trigger);
+  // apply envelope — fully typed (tx/block/trigger/event). Map the event → our internal ChainEventBody.
+  const data = delivery.data;
+  const event = toEventBody(data);
 
   // Type-2 TRANSFER (outflow) event — no function_name; the watched contract is the sender. Route to
   // incident triage (detection), never a re-audit.
-  if (event && isTransferEvent(event)) {
-    return handleTransfer(delivery, event, webhookId);
+  if (isTransferEvent(event)) {
+    return handleTransfer(data, event, webhookId);
   }
 
-  const contractId = event?.contract_id;
-  const fnName = event?.function_name;
+  const contractId = event.contract_id;
+  const fnName = event.function_name;
   if (!contractId || !fnName) {
     markHandled(webhookId);
     return new Response("accepted (no contract/fn to audit)", { status: 200 });
@@ -264,14 +263,14 @@ export async function handle(req: Request): Promise<Response> {
 
   // 5) event-level dedup (tx-based) — a replay/re-delivery of the same event is a no-op. A contract_call
   //    is tx-level (one event per tx), so no event_index is needed; block_hash guards the reorg re-mine.
-  const key = dedupKey(delivery.tx_id, contractId, fnName, delivery.block_hash);
+  const key = dedupKey(data.tx_id, contractId, fnName, data.block_hash);
   if (isDuplicate(key)) {
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });
   }
 
   // 6) PRE-FILTER — benign ⇒ log + 204, ZERO spend.
-  const verdict = classify(fn, event as ChainEventBody);
+  const verdict = classify(fn, event);
   if (!verdict.notable) {
     console.log(`[bridge] benign ${contractId}.${fnName}: ${verdict.reason} — no spend`);
     markHandled(webhookId);
@@ -287,10 +286,10 @@ export async function handle(req: Request): Promise<Response> {
       contractId,
       fnLabel: fnName,
       triggerClass: fn.triggerClass,
-      event: event as ChainEventBody,
+      event,
       verdict,
-      txId: delivery.tx_id,
-      blockHeight: delivery.block_height,
+      txId: data.tx_id,
+      blockHeight: data.block_height,
       dedupKey: key,
     }).catch((err) =>
       console.error(`[bridge] triage failed for ${contractId}: ${(err as Error).message}`),
@@ -327,12 +326,12 @@ export async function handle(req: Request): Promise<Response> {
   //    verdict before the slow PoC. SENTINEL_TIMELOCK_BLOCKS is the representative window (real
   //    per-DAO timelock read is a later refinement).
   const deadlineBlock =
-    routeForTriggerClass(fn.triggerClass) === "type1" && delivery.block_height
-      ? delivery.block_height + TIMELOCK_BLOCKS
+    routeForTriggerClass(fn.triggerClass) === "type1" && data.block_height
+      ? data.block_height + TIMELOCK_BLOCKS
       : null;
-  const { directive } = await buildDirective(config, fn, event as ChainEventBody, verdict, {
-    txId: delivery.tx_id,
-    blockHeight: delivery.block_height,
+  const { directive } = await buildDirective(config, fn, event, verdict, {
+    txId: data.tx_id,
+    blockHeight: data.block_height,
     deadlineBlock,
   });
 
@@ -348,8 +347,8 @@ export async function handle(req: Request): Promise<Response> {
     fn: fnName,
     triggerClass: fn.triggerClass,
     dedupKey: key,
-    txId: delivery.tx_id,
-    blockHeight: delivery.block_height,
+    txId: data.tx_id,
+    blockHeight: data.block_height,
     deadlineBlock: directive.deadline_block,
     auditTargets: directive.audit_targets,
     suspicious: verdict.suspicious,

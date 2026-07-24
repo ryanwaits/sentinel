@@ -1,8 +1,8 @@
 /**
- * Bridge orchestration tests — the NO-DISPATCH branches (no eve, no spend): rollback, no-contract,
- * unmonitored, and benign-below-threshold all return without reserving budget or POSTing to eve.
- * Signature verification is skipped here (no secret in KV / env), so these exercise routing only.
- * The notable → dispatch → readRun path is covered by the M3b live smoke.
+ * Bridge orchestration tests — routing over the REAL secondlayer chain-webhook envelope (decoded by
+ * the sdk's `decodeChainWebhook`). Exercises the no-dispatch branches (rollback, test-ping, malformed,
+ * no-fn, unmonitored, benign) plus the Type-2 transfer path incl. the per-event_index dedup. No spend:
+ * the transfer path routes to triage (no reserve); signature verify is skipped (no secret in env).
  */
 import { describe, expect, test } from "bun:test";
 import { Cl } from "@secondlayer/stacks/clarity";
@@ -10,6 +10,7 @@ import { handle } from "./secondlayer-webhook";
 
 const TREASURY = "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd002-treasury-mia-mining-v3";
 const DAO = "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.base-dao";
+const TS = "2026-07-24T00:00:00.000Z";
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/test-rule-key", {
@@ -19,177 +20,149 @@ function post(body: unknown, headers: Record<string, string> = {}): Request {
   });
 }
 
-describe("bridge no-dispatch branches", () => {
-  test("rollback (reorg) → 204, no dispatch", async () => {
+/** Build a real `chain.<trigger>.apply` delivery around an event. */
+function applyPost(
+  trigger: string,
+  event: unknown,
+  opts: { tx_id?: string; block_height?: number; block_hash?: string; whId: string },
+): Request {
+  return post(
+    {
+      type: `chain.${trigger}.apply`,
+      timestamp: TS,
+      data: {
+        action: "apply",
+        block_hash: opts.block_hash ?? "0xblock",
+        block_height: opts.block_height ?? 100,
+        tx_id: opts.tx_id ?? "0xtx",
+        canonical: true,
+        trigger,
+        event,
+      },
+    },
+    { "webhook-id": opts.whId },
+  );
+}
+
+/** A transfer-family event (nested `data`, carries `event_index`). */
+const transferEvent = (amount: string, eventIndex: number, tx_id = "0xtx") => ({
+  tx_id,
+  type: "stx_transfer_event",
+  event_index: eventIndex,
+  data: { sender: TREASURY, recipient: DAO, amount, memo: "" },
+});
+
+/** A tx-level `contract_call` event (flat, no `event_index`). */
+const contractCallEvent = (
+  contract_id: string | null,
+  function_name: string | null,
+  function_args: string[] | null,
+  tx_id = "0xtx",
+) => ({
+  tx_id,
+  type: "contract_call",
+  sender: DAO,
+  status: "success",
+  contract_id,
+  function_name,
+  function_args,
+  result_hex: null,
+});
+
+describe("bridge — decode + no-dispatch branches", () => {
+  test("reorg rollback → 204, no dispatch", async () => {
     const res = await handle(
       post(
-        { action: "rollback", tx_id: "0xabc", block_height: 5 },
+        {
+          type: "chain.reorg.rollback",
+          timestamp: TS,
+          data: { action: "rollback", fork_point_height: 5, orphaned: [], truncated: false },
+        },
         { "webhook-id": "wh-rollback" },
       ),
     );
     expect(res.status).toBe(204);
   });
 
-  test("no contract/fn in event → 200 no-op", async () => {
+  test("subscription test ping (chain.test.apply) → 200 acked, no dispatch", async () => {
     const res = await handle(
-      post({ action: "apply", event: { type: "x" } }, { "webhook-id": "wh-empty" }),
+      post(
+        {
+          type: "chain.test.apply",
+          timestamp: TS,
+          data: { test: true, message: "ping", subscription_id: "sub-1", sent_at: TS },
+        },
+        { "webhook-id": "wh-test" },
+      ),
     );
     expect(res.status).toBe(200);
   });
 
+  test("malformed body (not a chain-webhook delivery) → 400", async () => {
+    const res = await handle(post({ foo: "bar" }, { "webhook-id": "wh-bad" }));
+    expect(res.status).toBe(400);
+  });
+
+  test("contract_deploy (no function_name) → 200 no-op", async () => {
+    const ev = contractCallEvent("SP000000000000000000002Q6VF78.thing", null, null);
+    const res = await handle(applyPost("contract_deploy", ev, { whId: "wh-deploy" }));
+    expect(res.status).toBe(200);
+  });
+
   test("unmonitored contract (no KB record) → 204", async () => {
-    const res = await handle(
-      post(
-        {
-          action: "apply",
-          event: { contract_id: "SP000000000000000000002Q6VF78.unknown", function_name: "foo" },
-        },
-        { "webhook-id": "wh-unmonitored" },
-      ),
-    );
+    const ev = contractCallEvent("SP000000000000000000002Q6VF78.unknown", "foo", []);
+    const res = await handle(applyPost("contract_call", ev, { whId: "wh-unmonitored" }));
     expect(res.status).toBe(204);
   });
 
-  test("benign outflow below threshold → 204, no spend", async () => {
+  test("benign contract_call below threshold → 204, no spend", async () => {
+    // withdraw-stx(amount=1, recipient): 1 < 1e12 threshold ⇒ benign
+    const ev = contractCallEvent(TREASURY, "withdraw-stx", [
+      Cl.serialize(Cl.uint(1n)),
+      Cl.serialize(Cl.standardPrincipal("SP000000000000000000002Q6VF78")),
+    ]);
     const res = await handle(
-      post(
-        {
-          action: "apply",
-          tx_id: "0xbenign",
-          block_height: 10,
-          event: {
-            contract_id: TREASURY,
-            function_name: "withdraw-stx",
-            sender: DAO,
-            // withdraw-stx(amount, recipient): 1 < 1e12 threshold ⇒ benign
-            function_args: [
-              Cl.serialize(Cl.uint(1n)),
-              Cl.serialize(Cl.standardPrincipal("SP000000000000000000002Q6VF78")),
-            ],
-          },
-        },
-        { "webhook-id": "wh-benign" },
-      ),
+      applyPost("contract_call", ev, { tx_id: "0xbenign", whId: "wh-benign" }),
     );
     expect(res.status).toBe(204);
   });
+});
 
-  // Type-2: a TRANSFER event (no function_name; sender = the watched contract) routes to incident
-  // triage, gated by the same outflow threshold. ccd002 withdraw-stx threshold = 1e12.
-  test("Type-2 stx outflow over threshold → 202 (triage queued, no audit)", async () => {
+describe("bridge — Type-2 transfer (outflow) routing", () => {
+  test("stx outflow over threshold → 202 (triage queued, no audit)", async () => {
     const res = await handle(
-      post(
-        {
-          action: "apply",
-          tx_id: "0xout",
-          block_height: 20,
-          event: {
-            type: "stx_transfer",
-            sender: TREASURY,
-            amount: "5000000000000",
-            recipient: DAO,
-          },
-        },
-        { "webhook-id": "wh-outflow" },
-      ),
+      applyPost("stx_transfer", transferEvent("5000000000000", 1, "0xout"), {
+        tx_id: "0xout",
+        whId: "wh-outflow",
+      }),
     );
     expect(res.status).toBe(202);
   });
 
-  test("Type-2 stx outflow below threshold → 204 (benign, no spend)", async () => {
+  test("stx outflow below threshold → 204 (benign, no spend)", async () => {
     const res = await handle(
-      post(
-        {
-          action: "apply",
-          tx_id: "0xsmall",
-          block_height: 21,
-          event: { type: "stx_transfer", sender: TREASURY, amount: "1", recipient: DAO },
-        },
-        { "webhook-id": "wh-small" },
-      ),
+      applyPost("stx_transfer", transferEvent("1", 1, "0xsmall"), {
+        tx_id: "0xsmall",
+        whId: "wh-small",
+      }),
     );
     expect(res.status).toBe(204);
   });
 
-  // The REAL secondlayer envelope (captured from a live DLMM stx_transfer delivery, 2026-07-01):
-  // { type:"chain.stx_transfer.apply", data:{ action, tx_id, block_height, trigger:"stx_transfer",
-  //   event:{ type:"stx_transfer_event", data:{ amount, sender, recipient } } } }. The bridge unwraps
-  // `data` + the double-nested `event.data` + strips the `_event` suffix. Must route to triage.
-  test("Type-2 transfer via the REAL nested envelope (data wrapper + event.data) → 202", async () => {
-    const res = await handle(
-      post(
-        {
-          type: "chain.stx_transfer.apply",
-          data: {
-            action: "apply",
-            tx_id: "0xreal",
-            block_height: 8445086,
-            trigger: "stx_transfer",
-            event: {
-              type: "stx_transfer_event",
-              data: { memo: "", amount: "5000000000000", sender: TREASURY, recipient: DAO },
-            },
-          },
-        },
-        { "webhook-id": "wh-real" },
-      ),
-    );
-    expect(res.status).toBe(202);
-  });
-
-  // The bug: one tx emits many transfer events (a swap → N outflows), each with a distinct event_index.
-  // Before the fix the dedup key was `tx:contract:outflow:<asset>` — identical for all → we triaged the
-  // first and DROPPED the rest. Now the key carries event_index, so all three dispatch.
-  test("Type-2: 3 same-tx outflows with distinct event_index → 3 triggers (not collapsed to 1)", async () => {
+  // The bug: one tx emits many transfer events (a swap → N outflows), each a distinct event_index. The
+  // dedup key now carries it, so all three dispatch (before the fix, #2/#3 were dropped as duplicates).
+  test("3 same-tx outflows with distinct event_index → 3 triggers (not collapsed to 1)", async () => {
     const outflow = (eventIndex: number, whId: string) =>
       handle(
-        post(
-          {
-            action: "apply",
-            tx_id: "0xmulti",
-            block_height: 30,
-            event: {
-              type: "stx_transfer",
-              sender: TREASURY,
-              amount: "5000000000000", // > 1e12 threshold ⇒ notable
-              recipient: DAO,
-              event_index: eventIndex,
-            },
-          },
-          { "webhook-id": whId },
-        ),
+        applyPost("stx_transfer", transferEvent("5000000000000", eventIndex, "0xmulti"), {
+          tx_id: "0xmulti",
+          whId,
+        }),
       );
     expect((await outflow(2220, "wh-m1")).status).toBe(202);
-    expect((await outflow(2230, "wh-m2")).status).toBe(202); // was dropped as a dup before the fix
+    expect((await outflow(2230, "wh-m2")).status).toBe(202); // dropped as a dup before the fix
     expect((await outflow(2240, "wh-m3")).status).toBe(202);
     // a genuine re-delivery of the FIRST event (same event_index, new webhook-id) still dedups
     expect((await outflow(2220, "wh-m1-redeliver")).status).toBe(200);
-  });
-
-  // event_index lives on the event object in the REAL nested envelope (event.event_index, not
-  // event.data.event_index) — normalizeEvent must read it there for the fix to work on live deliveries.
-  test("Type-2: nested-envelope outflows are distinguished by event_index", async () => {
-    const nested = (eventIndex: number, whId: string) =>
-      handle(
-        post(
-          {
-            type: "chain.stx_transfer.apply",
-            data: {
-              action: "apply",
-              tx_id: "0xnested-multi",
-              block_height: 31,
-              trigger: "stx_transfer",
-              event: {
-                type: "stx_transfer_event",
-                event_index: eventIndex,
-                data: { amount: "5000000000000", sender: TREASURY, recipient: DAO },
-              },
-            },
-          },
-          { "webhook-id": whId },
-        ),
-      );
-    expect((await nested(2220, "wh-n1")).status).toBe(202);
-    expect((await nested(2230, "wh-n2")).status).toBe(202); // distinct event_index from the nested shape
   });
 });

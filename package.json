@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.195",
-    "@secondlayer/sdk": "^6.25.1",
+    "@secondlayer/sdk": "^6.30.0",
     "@secondlayer/stacks": "^2.11.0",
     "@secondlayer/subgraphs": "^3.16.0",
     "@stacks/clarinet-sdk": "^3.22.0",
