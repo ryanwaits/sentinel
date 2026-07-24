@@ -3,7 +3,9 @@
 // Every call fails soft: if the worker is unreachable, callers fall back to the demo flow, so the
 // deployed marketing site keeps working without a worker wired up.
 
-const WORKER_URL = import.meta.env.VITE_SENTINEL_WORKER_URL ?? "http://localhost:3011"
+// Default matches the port the worker actually serves (webhooks/secondlayer-webhook.ts, PORT=3001).
+// VITE_SENTINEL_WORKER_URL overrides for prod (the live worker); unset/unreachable → the demo flow.
+const WORKER_URL = import.meta.env.VITE_SENTINEL_WORKER_URL ?? "http://localhost:3001"
 
 export type PublicFinding = {
   title: string
@@ -20,6 +22,8 @@ export type PublicResult = {
   provisional: boolean
   needsHuman: boolean
   pocStatus: string
+  /** House-voice prose summary (finding-report voice), shown above the finding cards. */
+  summary: string
   findings: PublicFinding[]
   recommendedAction: string
   tokenCostUsd: number

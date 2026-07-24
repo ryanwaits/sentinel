@@ -263,7 +263,18 @@ function StepAudit({
       </div>
 
       {done ? (
-        <div className="mt-4 grid gap-2">
+        <div className="mt-4 space-y-3">
+          {done.summary && (
+            <div className="rounded-[10px] border border-border bg-card px-[15px] py-[13px]">
+              <div className="mb-1.5 font-mono text-[11px] uppercase tracking-wide text-faint">
+                Summary
+              </div>
+              <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-foreground">
+                {done.summary}
+              </p>
+            </div>
+          )}
+          <div className="grid gap-2">
           {done.findings.length === 0 ? (
             <div className="rounded-[10px] border border-border bg-secondary px-[15px] py-[13px] text-[13px] text-muted-foreground">
               No exploitable finding. Sentinel would rather say clean than inflate one.
@@ -286,6 +297,7 @@ function StepAudit({
               </div>
             ))
           )}
+          </div>
         </div>
       ) : failed ? (
         <div className="mt-4 rounded-[10px] border border-border bg-secondary px-[15px] py-[13px] text-[13px] text-muted-foreground">
