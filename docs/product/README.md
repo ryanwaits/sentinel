@@ -1,5 +1,9 @@
 # Sentinel — product surface (planning index)
 
+> **Canonical system spine: [./system.md](./system.md)** — the layers, dataflow, and honest
+> shipped/tested/gap status of the whole product. Read that first; it supersedes per-layer *status*
+> claims scattered across the docs below. This file is the **multi-tenant surface** plan specifically.
+
 Scope docs for turning the **proven monitoring backend** (M0–M5; see
 [../monitoring-build-plan.md](../monitoring-build-plan.md)) into a **multi-tenant product** —
 signup → project → audit → toggle monitoring → human-gated alerts. Planning only; no production
