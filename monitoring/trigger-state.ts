@@ -79,8 +79,16 @@ function pruneSeen(state: State, now: number): void {
 }
 
 /** Event identity for dedup: the same on-chain event always yields the same key. */
-export function dedupKey(txId: string | undefined, contractId: string, fn: string): string {
-  return `${txId ?? "no-tx"}:${contractId}:${fn}`;
+export function dedupKey(
+  txId: string | undefined,
+  contractId: string,
+  fn: string,
+  blockHash?: string,
+): string {
+  // `fn` carries the per-event discriminator for transfers (`outflow:<asset>:<event_index>`) so
+  // multiple transfer events in one tx do NOT collapse to a single key. `blockHash` (optional) guards
+  // the reorg re-mine edge — same tx in a new block → distinct key → re-processed.
+  return `${txId ?? "no-tx"}:${contractId}:${fn}${blockHash ? `@${blockHash}` : ""}`;
 }
 
 /** Has this exact event already been processed (within the dedup TTL)? Does NOT mark. */

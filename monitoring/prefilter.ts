@@ -46,6 +46,10 @@ export type ChainEventBody = {
   asset_identifier?: string;
   amount?: string;
   recipient?: string;
+  /** Per-event ordinal within the tx — ONE tx emits many transfer events (e.g. a swap → 3 outflows),
+   *  each with a distinct event_index. Load-bearing for dedup: without it, same-tx outflows collapse to
+   *  one key and we drop all but the first. Set by the bridge's normalizeEvent from the delivery. */
+  event_index?: number;
 };
 
 // A fully-qualified contract principal `SP….name` (the shape a decoded proposal/extension arg takes).

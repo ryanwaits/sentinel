@@ -53,6 +53,9 @@ type ChainDelivery = {
   action?: "apply" | "rollback";
   trigger?: string;
   block_height?: number;
+  /** Block hash — folded into the dedup key so the same tx re-mined in a different block (reorg) is
+   *  re-processed instead of deduped. Optional: absent → the key degrades to today's behavior. */
+  block_hash?: string;
   tx_id?: string;
   event?: RawEvent;
 };
@@ -115,6 +118,9 @@ function normalizeEvent(
     asset_identifier: f.asset_identifier,
     amount: f.amount,
     recipient: f.recipient,
+    // event_index lives on the event object itself (rawEvent), not the nested `data` (f); keep the
+    // fallback for the flat/synthetic shape. Load-bearing for per-event transfer dedup.
+    event_index: rawEvent.event_index ?? f.event_index,
   };
 }
 
@@ -157,8 +163,11 @@ async function handleTransfer(
     markHandled(webhookId);
     return new Response("no outflow watch for this asset", { status: 204 });
   }
-  const fnLabel = `outflow:${asset}`;
-  const key = dedupKey(delivery.tx_id, contractId, fnLabel);
+  // Per-event dedup: one tx emits many transfer events (a swap → N outflows), each with a distinct
+  // event_index. Keying on it stops same-tx outflows collapsing to one key (dropping all but the first).
+  const fnLabel =
+    event.event_index != null ? `outflow:${asset}:${event.event_index}` : `outflow:${asset}`;
+  const key = dedupKey(delivery.tx_id, contractId, fnLabel, delivery.block_hash);
   if (isDuplicate(key)) {
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });
@@ -253,8 +262,9 @@ export async function handle(req: Request): Promise<Response> {
     return new Response("fn not watched", { status: 204 });
   }
 
-  // 5) event-level dedup (tx-based) — a replay/re-delivery of the same event is a no-op.
-  const key = dedupKey(delivery.tx_id, contractId, fnName);
+  // 5) event-level dedup (tx-based) — a replay/re-delivery of the same event is a no-op. A contract_call
+  //    is tx-level (one event per tx), so no event_index is needed; block_hash guards the reorg re-mine.
+  const key = dedupKey(delivery.tx_id, contractId, fnName, delivery.block_hash);
   if (isDuplicate(key)) {
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });

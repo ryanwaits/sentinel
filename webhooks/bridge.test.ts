@@ -136,4 +136,60 @@ describe("bridge no-dispatch branches", () => {
     );
     expect(res.status).toBe(202);
   });
+
+  // The bug: one tx emits many transfer events (a swap → N outflows), each with a distinct event_index.
+  // Before the fix the dedup key was `tx:contract:outflow:<asset>` — identical for all → we triaged the
+  // first and DROPPED the rest. Now the key carries event_index, so all three dispatch.
+  test("Type-2: 3 same-tx outflows with distinct event_index → 3 triggers (not collapsed to 1)", async () => {
+    const outflow = (eventIndex: number, whId: string) =>
+      handle(
+        post(
+          {
+            action: "apply",
+            tx_id: "0xmulti",
+            block_height: 30,
+            event: {
+              type: "stx_transfer",
+              sender: TREASURY,
+              amount: "5000000000000", // > 1e12 threshold ⇒ notable
+              recipient: DAO,
+              event_index: eventIndex,
+            },
+          },
+          { "webhook-id": whId },
+        ),
+      );
+    expect((await outflow(2220, "wh-m1")).status).toBe(202);
+    expect((await outflow(2230, "wh-m2")).status).toBe(202); // was dropped as a dup before the fix
+    expect((await outflow(2240, "wh-m3")).status).toBe(202);
+    // a genuine re-delivery of the FIRST event (same event_index, new webhook-id) still dedups
+    expect((await outflow(2220, "wh-m1-redeliver")).status).toBe(200);
+  });
+
+  // event_index lives on the event object in the REAL nested envelope (event.event_index, not
+  // event.data.event_index) — normalizeEvent must read it there for the fix to work on live deliveries.
+  test("Type-2: nested-envelope outflows are distinguished by event_index", async () => {
+    const nested = (eventIndex: number, whId: string) =>
+      handle(
+        post(
+          {
+            type: "chain.stx_transfer.apply",
+            data: {
+              action: "apply",
+              tx_id: "0xnested-multi",
+              block_height: 31,
+              trigger: "stx_transfer",
+              event: {
+                type: "stx_transfer_event",
+                event_index: eventIndex,
+                data: { amount: "5000000000000", sender: TREASURY, recipient: DAO },
+              },
+            },
+          },
+          { "webhook-id": whId },
+        ),
+      );
+    expect((await nested(2220, "wh-n1")).status).toBe(202);
+    expect((await nested(2230, "wh-n2")).status).toBe(202); // distinct event_index from the nested shape
+  });
 });
