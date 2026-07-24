@@ -27,6 +27,8 @@ export type PublicResult = {
   provisional: boolean;
   needsHuman: boolean;
   pocStatus: string;
+  /** House-voice prose summary (finding-report voice), shown above the finding cards. */
+  summary: string;
   findings: PublicFinding[];
   recommendedAction: string;
   tokenCostUsd: number;
@@ -53,8 +55,10 @@ export type AuditRequestStatus =
 
 const store = new Map<string, AuditRequestStatus>();
 
-/** Trim an adjudication to the browser-safe public shape (kept findings only). */
-export function toPublicResult(adj: Adjudication): PublicResult {
+/** Trim an adjudication to the browser-safe public shape (kept findings only). `summary` is the
+ *  house-voice prose rendered separately (see monitoring/render-summary.ts) — passed in so this stays
+ *  pure/sync; defaults to "" (the web falls back to the findings-only render). */
+export function toPublicResult(adj: Adjudication, summary = ""): PublicResult {
   return {
     severity: adj.severity,
     class: adj.class,
@@ -62,6 +66,7 @@ export function toPublicResult(adj: Adjudication): PublicResult {
     provisional: adj.provisional,
     needsHuman: adj.needsHuman,
     pocStatus: adj.pocStatus,
+    summary,
     findings: adj.findings
       .filter((f) => f.kept)
       .map((f) => ({

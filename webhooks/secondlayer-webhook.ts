@@ -29,6 +29,7 @@ import {
 } from "../monitoring/audit-results";
 import { routeForTriggerClass } from "../monitoring/config";
 import { buildDirective, tierFor } from "../monitoring/directive";
+import { renderSummary } from "../monitoring/render-summary";
 import { triageTrigger } from "../monitoring/incident-triage";
 import { deriveConfig } from "../monitoring/kb";
 import { isValidContractId, networkOf } from "../monitoring/network";
@@ -406,6 +407,7 @@ const defaultAuditRunner: (r: AuditRequest) => Promise<Adjudication> = process.e
 export async function handleAuditRequest(
   req: Request,
   run: (r: AuditRequest) => Promise<Adjudication> = defaultAuditRunner,
+  render: (adj: Adjudication) => Promise<string> = renderSummary,
 ): Promise<Response> {
   let body: { contractId?: string; tier?: string; client?: string };
   try {
@@ -429,7 +431,10 @@ export async function handleAuditRequest(
   // Fire-and-forget: audits take minutes. On completion the public result lands in the store for the
   // browser to poll. (Durable queue + store is a backend-hardening item.)
   run(request)
-    .then((adj) => setAuditDone(requestId, toPublicResult(adj)))
+    .then(async (adj) => {
+      const summary = await render(adj); // house-voice prose; never throws (falls back to a template)
+      setAuditDone(requestId, toPublicResult(adj, summary));
+    })
     .catch((e) => {
       console.error(`[audit-request] ${contractId} failed: ${(e as Error).message}`);
       setAuditError(requestId, (e as Error).message);

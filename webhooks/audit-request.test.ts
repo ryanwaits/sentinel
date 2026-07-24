@@ -17,6 +17,9 @@ const runWith =
   async (r) =>
     adjudicateFindings({ sessionId: "test", contractId: r.contractId, findings, tokenCostUsd: 0 });
 
+/** Stub renderer — deterministic, no model/subprocess (the real renderSummary is exercised elsewhere). */
+const renderStub = async (): Promise<string> => "stub house-voice summary";
+
 const bug: Finding = {
   title: "socialize-debt forces unbounded LP loss",
   severity: "critical",
@@ -45,7 +48,7 @@ async function poll(requestId: string, tries = 40): Promise<Record<string, unkno
 
 describe("handleAuditRequest", () => {
   test("a valid contract → 202 running (derived network) with CORS", async () => {
-    const res = await handleAuditRequest(post({ contractId: VAULT }), runWith());
+    const res = await handleAuditRequest(post({ contractId: VAULT }), runWith(), renderStub);
     expect(res.status).toBe(202);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     const json = (await res.json()) as Record<string, unknown>;
@@ -55,14 +58,19 @@ describe("handleAuditRequest", () => {
     expect(typeof json.sessionId).toBe("string");
   });
 
-  test("the result is pollable to done, with the public findings", async () => {
-    const res = await handleAuditRequest(post({ contractId: VAULT, tier: "deep" }), runWith([bug]));
+  test("the result is pollable to done, with the public findings + house-voice summary", async () => {
+    const res = await handleAuditRequest(
+      post({ contractId: VAULT, tier: "deep" }),
+      runWith([bug]),
+      renderStub,
+    );
     const { sessionId } = (await res.json()) as { sessionId: string };
     const final = await poll(sessionId);
     expect(final.status).toBe("done");
-    const result = final.result as { severity: string; findings: unknown[] };
+    const result = final.result as { severity: string; summary: string; findings: unknown[] };
     expect(result.severity).toBe("critical");
     expect(result.findings).toHaveLength(1);
+    expect(result.summary).toBe("stub house-voice summary"); // rendered summary flows into the verdict
   });
 
   test("an invalid contractId → 400 (no dispatch)", async () => {
