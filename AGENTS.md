@@ -15,6 +15,9 @@ Orchestrator persona: `agent/instructions.md`. Orchestrator = Opus 4.8 (`agent/a
    client-configured + context-aware triggers fire alerts. See
    [docs/monitoring.md](./docs/monitoring.md).
 7. **Act** — disclosure / bounty / salvage / alert-escalation. **Human-gated. Never automatic.**
+   Write every finding report in the house voice — terse, trusted-colleague, proof-forward — via the
+   `finding-report` skill (`.claude/skills/finding-report/`). A comprehensive write-up reads as AI and
+   gets closed unread; the PoC is the credibility, the prose is a colleague's summary.
 
 ## Reproduce-before-ship (the credibility rule)
 A finding ships ONLY if it (a) survives adversarial verification AND (b) has a
