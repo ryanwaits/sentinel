@@ -31,8 +31,3 @@ simnet/history.json
 docs/findings/
 simnet/poc/hermetica-*.ts
 simnet/hermetica-fork/
-simnet/contracts/token-hbtc.clar
-simnet/contracts/state-hbtc.clar
-simnet/contracts/blacklist.clar
-simnet/contracts/vault-hbtc.clar
-simnet/contracts/vault-hbtc-fixed.clar
