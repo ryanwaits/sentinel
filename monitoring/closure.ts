@@ -75,6 +75,10 @@ export async function resolveClosure(
 }
 
 /** Just the contract ids of a closure (the `audit_targets[]` list), root first. */
-export async function resolveClosureIds(rootId: string, fetchSource: SourceFetcher, opts?: { maxDepth?: number; maxContracts?: number }): Promise<string[]> {
+export async function resolveClosureIds(
+  rootId: string,
+  fetchSource: SourceFetcher,
+  opts?: { maxDepth?: number; maxContracts?: number },
+): Promise<string[]> {
   return (await resolveClosure(rootId, fetchSource, opts)).map((e) => e.contractId);
 }

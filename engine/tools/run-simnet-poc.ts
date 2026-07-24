@@ -92,7 +92,7 @@ export function forkPreflight(args: {
       ok: false,
       kind: "unavailable",
       message:
-        'SANDBOX UNAVAILABLE (set pocStatus "pending"): fork substrate needs SENTINEL_SANDBOX_NETWORK + SENTINEL_EGRESS_PROXY (the internal network + allowlist proxy from deploy/docker-compose.yml). Refusing to run a fork PoC with unrestricted egress. Re-run with substrate \'airgapped\' instead.',
+        "SANDBOX UNAVAILABLE (set pocStatus \"pending\"): fork substrate needs SENTINEL_SANDBOX_NETWORK + SENTINEL_EGRESS_PROXY (the internal network + allowlist proxy from deploy/docker-compose.yml). Refusing to run a fork PoC with unrestricted egress. Re-run with substrate 'airgapped' instead.",
     };
   }
   if (!args.pocSource) {

@@ -29,11 +29,11 @@ import {
 } from "../monitoring/audit-results";
 import { routeForTriggerClass } from "../monitoring/config";
 import { buildDirective, tierFor } from "../monitoring/directive";
-import { renderSummary } from "../monitoring/render-summary";
 import { triageTrigger } from "../monitoring/incident-triage";
 import { deriveConfig } from "../monitoring/kb";
 import { isValidContractId, networkOf } from "../monitoring/network";
 import { type ChainEventBody, classify } from "../monitoring/prefilter";
+import { renderSummary } from "../monitoring/render-summary";
 import { verifySignature } from "../monitoring/sources/trigger-source";
 import { reserve, type Tier } from "../monitoring/spend-ceiling";
 import { getByRuleKey } from "../monitoring/sub-store";

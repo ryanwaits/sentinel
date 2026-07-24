@@ -72,7 +72,18 @@ export async function llmRenderSummary(adj: Adjudication): Promise<string> {
       model: RENDER_MODEL,
       systemPrompt: VOICE,
       allowedTools: [],
-      disallowedTools: ["Bash", "WebFetch", "WebSearch", "Read", "Grep", "Glob", "Write", "Edit", "Task", "Agent"],
+      disallowedTools: [
+        "Bash",
+        "WebFetch",
+        "WebSearch",
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Edit",
+        "Task",
+        "Agent",
+      ],
       permissionMode: "bypassPermissions",
       settingSources: [],
       maxTurns: 1,
@@ -131,7 +142,8 @@ export function templateSummary(adj: Adjudication): string {
 /** The verdict-safe renderer: never throws, never spends under mock, and can't call the model without a
  *  key — so mock, tests, and keyless dev all deterministically get the template; prod gets the LLM voice. */
 export async function renderSummary(adj: Adjudication): Promise<string> {
-  if (process.env.SENTINEL_AUDIT_MOCK || !process.env.ANTHROPIC_API_KEY) return templateSummary(adj);
+  if (process.env.SENTINEL_AUDIT_MOCK || !process.env.ANTHROPIC_API_KEY)
+    return templateSummary(adj);
   try {
     return await llmRenderSummary(adj);
   } catch (e) {
