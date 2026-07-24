@@ -28,6 +28,12 @@ export const VerifierVerdict = z.enum(["confirmed", "refuted", "uncertain"]);
 export const PocStatus = z.enum(["green", "pending", "failed", "na"]);
 export type PocStatus = z.infer<typeof PocStatus>;
 
+/** Which substrate reproduced the PoC. A `fork` green (unmodified deployed bytecode + real chain
+ *  state) is stronger evidence than an `airgapped` green (reconstructed contracts). Recorded so the
+ *  two are distinguishable downstream; it does NOT change gate pass/fail. */
+export const PocSubstrate = z.enum(["airgapped", "fork"]);
+export type PocSubstrate = z.infer<typeof PocSubstrate>;
+
 /** One finding as emitted in the report's [SENTINEL-FINDINGS] block. */
 export const Finding = z.object({
   title: z.string(),
@@ -35,6 +41,8 @@ export const Finding = z.object({
   class: FindingClass,
   verifierVerdict: VerifierVerdict,
   pocStatus: PocStatus.default("na"),
+  /** The substrate that reproduced the PoC (set only when a PoC ran) — fork is stronger evidence. */
+  pocSubstrate: PocSubstrate.optional(),
   confidence: z.number().min(0).max(1).optional(),
   blastRadius: z.string().optional(),
   recommendedAction: z.string().optional(),

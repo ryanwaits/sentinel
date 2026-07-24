@@ -19,6 +19,12 @@ export const FINDINGS_SCHEMA = {
           class: { type: "string", enum: ["bug", "centralization", "info"] },
           verifierVerdict: { type: "string", enum: ["confirmed", "refuted", "uncertain"] },
           pocStatus: { type: "string", enum: ["green", "pending", "failed", "na"] },
+          pocSubstrate: {
+            type: "string",
+            enum: ["airgapped", "fork"],
+            description:
+              "the substrate the PoC ran on — set from the run_simnet_poc result (substrate=fork|airgapped); a fork green is stronger evidence. Omit if no PoC ran.",
+          },
           confidence: { type: "number" },
           blastRadius: { type: "string" },
           recommendedAction: { type: "string" },

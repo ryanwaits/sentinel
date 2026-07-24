@@ -87,6 +87,10 @@ export function enforceGates(findings: Finding[], ev: RunEvidence): GateReport {
       f = { ...f, pocStatus: "pending" };
     }
 
+    // NOTE: pocSubstrate (fork | airgapped) is recorded on the finding but does NOT change gate
+    // pass/fail here — a fork green is the strongest evidence, an airgapped green still passes.
+    // Forcing fork would need the deploy-time containment env and would break local audits.
+
     return f;
   });
 
