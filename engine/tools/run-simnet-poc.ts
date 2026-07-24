@@ -71,6 +71,36 @@ function writeForkProject(dir: string, height: number): void {
   );
 }
 
+export type ForkPreflight =
+  | { ok: true }
+  | { ok: false; kind: "unavailable" | "error"; message: string };
+
+/**
+ * Pure fork-mode gate — decide whether a fork PoC may run, WITHOUT touching docker or the network.
+ * `unavailable` (missing containment) maps to pocStatus "pending" at the call site; `error` (missing
+ * pocSource) is a hard input error. Env values are passed explicitly so this unit-tests deterministically.
+ * Refuse rather than degrade: without the internal network there is no containment, and a PoC that
+ * ignores HTTPS_PROXY would reach the open internet — silent fallback would be false safety.
+ */
+export function forkPreflight(args: {
+  sandboxNetwork: string;
+  egressProxy: string;
+  pocSource?: string;
+}): ForkPreflight {
+  if (!args.sandboxNetwork || !args.egressProxy) {
+    return {
+      ok: false,
+      kind: "unavailable",
+      message:
+        'SANDBOX UNAVAILABLE (set pocStatus "pending"): fork substrate needs SENTINEL_SANDBOX_NETWORK + SENTINEL_EGRESS_PROXY (the internal network + allowlist proxy from deploy/docker-compose.yml). Refusing to run a fork PoC with unrestricted egress. Re-run with substrate \'airgapped\' instead.',
+    };
+  }
+  if (!args.pocSource) {
+    return { ok: false, kind: "error", message: "ERROR: fork substrate requires `pocSource`." };
+  }
+  return { ok: true };
+}
+
 /** Resolve the chain tip so a run that did not pin a height still records exactly what it read. */
 async function resolveForkHeight(requested?: number): Promise<number> {
   if (requested && requested > 0) return requested;
@@ -144,14 +174,13 @@ export const runSimnetPocTool = tool(
     let pinnedHeight: number | null = null;
 
     if (substrate === "fork") {
-      // Refuse rather than degrade: without the internal network there is no containment, and a PoC
-      // that ignores HTTPS_PROXY would reach the open internet. Silent fallback would be false safety.
-      if (!SANDBOX_NETWORK || !EGRESS_PROXY) {
-        return fail(
-          "SANDBOX UNAVAILABLE (set pocStatus \"pending\"): fork substrate needs SENTINEL_SANDBOX_NETWORK + SENTINEL_EGRESS_PROXY (the internal network + allowlist proxy from deploy/docker-compose.yml). Refusing to run a fork PoC with unrestricted egress. Re-run with substrate 'airgapped' instead.",
-        );
-      }
-      if (!pocSource) return fail("ERROR: fork substrate requires `pocSource`.");
+      const pre = forkPreflight({
+        sandboxNetwork: SANDBOX_NETWORK,
+        egressProxy: EGRESS_PROXY,
+        pocSource,
+      });
+      if (!pre.ok) return fail(pre.message);
+      const source = pocSource as string; // preflight guarantees it is set
       try {
         pinnedHeight = await resolveForkHeight(forkHeight);
       } catch (e) {
@@ -159,7 +188,7 @@ export const runSimnetPocTool = tool(
       }
       scratch = mkdtempSync(join(SCRATCH_DIR, "sentinel-fork-"));
       writeForkProject(scratch, pinnedHeight);
-      writeFileSync(join(scratch, "_dynamic.ts"), pocSource, "utf8");
+      writeFileSync(join(scratch, "_dynamic.ts"), source, "utf8");
       // Mounted rw: clarinet writes a deployment plan and a state cache beside the manifest.
       result = runDocker([
         "run",
