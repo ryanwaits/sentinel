@@ -76,7 +76,7 @@ function arm(sock: import("bun").Socket<Conn>) {
  * Parse `CONNECT host:port HTTP/1.1`. Anything else is refused: the only protocol a fork PoC needs
  * is a TLS tunnel, and every other method widens the surface for no benefit.
  */
-function parseConnect(head: string): { host: string; port: number } | { error: string } {
+export function parseConnect(head: string): { host: string; port: number } | { error: string } {
   const line = head.split("\r\n", 1)[0] ?? "";
   const [method, target] = line.split(" ");
   if (method !== "CONNECT") return { error: `non-CONNECT method ${method || "(none)"}` };
@@ -86,6 +86,30 @@ function parseConnect(head: string): { host: string; port: number } | { error: s
   const port = Number(target.slice(idx + 1));
   if (!Number.isInteger(port)) return { error: `malformed port in ${target}` };
   return { host, port };
+}
+
+export type ConnectDecision =
+  | { action: "allow"; host: string; port: number }
+  | { action: "deny"; status: string; reason: string };
+
+/**
+ * The full allow/deny decision for one CONNECT handshake — pure, so it unit-tests without sockets.
+ * Refuse anything that is not a CONNECT to an allowlisted host on an allowed (TLS-only) port. This is
+ * the discriminator; the internal docker network is what makes it unavoidable (see file header).
+ */
+export function classifyConnect(
+  head: string,
+  allow: Set<string>,
+  allowedPorts: Set<number> = ALLOWED_PORTS,
+): ConnectDecision {
+  const parsed = parseConnect(head);
+  if ("error" in parsed)
+    return { action: "deny", status: "405 Method Not Allowed", reason: parsed.error };
+  const { host, port } = parsed;
+  if (!allowedPorts.has(port))
+    return { action: "deny", status: "403 Forbidden", reason: `port ${host}:${port}` };
+  if (!allow.has(host)) return { action: "deny", status: "403 Forbidden", reason: `host ${host}` };
+  return { action: "allow", host, port };
 }
 
 function openTunnel(client: import("bun").Socket<Conn>, host: string, port: number) {
@@ -119,63 +143,65 @@ function openTunnel(client: import("bun").Socket<Conn>, host: string, port: numb
   });
 }
 
-Bun.listen<Conn>({
-  hostname: "0.0.0.0", // must be reachable from the sandbox container, not just loopback
-  port: PORT,
-  socket: {
-    open(sock) {
-      sock.data = {
-        phase: "handshake",
-        buf: new Uint8Array(0),
-        upstream: null,
-        queued: [],
-        timer: null,
-      };
-      arm(sock);
-    },
-    data(sock, chunk) {
-      arm(sock);
-      if (sock.data.phase === "tunnel") {
-        if (sock.data.upstream) sock.data.upstream.write(chunk);
-        else sock.data.queued.push(chunk); // upstream still connecting
-        return;
-      }
-      if (sock.data.phase === "closed") return;
+/** Boot the listener. Guarded by `import.meta.main` so importing this module for tests is side-effect free. */
+function serve(): void {
+  Bun.listen<Conn>({
+    hostname: "0.0.0.0", // must be reachable from the sandbox container, not just loopback
+    port: PORT,
+    socket: {
+      open(sock) {
+        sock.data = {
+          phase: "handshake",
+          buf: new Uint8Array(0),
+          upstream: null,
+          queued: [],
+          timer: null,
+        };
+        arm(sock);
+      },
+      data(sock, chunk) {
+        arm(sock);
+        if (sock.data.phase === "tunnel") {
+          if (sock.data.upstream) sock.data.upstream.write(chunk);
+          else sock.data.queued.push(chunk); // upstream still connecting
+          return;
+        }
+        if (sock.data.phase === "closed") return;
 
-      sock.data.buf = concat(sock.data.buf, chunk);
-      if (sock.data.buf.length > MAX_HEADER) {
-        return refuse(sock, "431 Request Header Fields Too Large", "oversized handshake");
-      }
-      const head = new TextDecoder().decode(sock.data.buf);
-      if (!head.includes("\r\n\r\n")) return; // headers incomplete, wait for more
+        sock.data.buf = concat(sock.data.buf, chunk);
+        if (sock.data.buf.length > MAX_HEADER) {
+          return refuse(sock, "431 Request Header Fields Too Large", "oversized handshake");
+        }
+        const head = new TextDecoder().decode(sock.data.buf);
+        if (!head.includes("\r\n\r\n")) return; // headers incomplete, wait for more
 
-      const parsed = parseConnect(head);
-      if ("error" in parsed) return refuse(sock, "405 Method Not Allowed", parsed.error);
-      const { host, port } = parsed;
-      if (!ALLOWED_PORTS.has(port)) return refuse(sock, "403 Forbidden", `port ${host}:${port}`);
-      if (!ALLOW.has(host)) return refuse(sock, "403 Forbidden", `host ${host}`);
+        const decision = classifyConnect(head, ALLOW, ALLOWED_PORTS);
+        if (decision.action === "deny") return refuse(sock, decision.status, decision.reason);
 
-      log(`ALLOW  ${host}:${port}`);
-      sock.data.phase = "tunnel";
-      sock.data.buf = new Uint8Array(0);
-      openTunnel(sock, host, port);
+        log(`ALLOW  ${decision.host}:${decision.port}`);
+        sock.data.phase = "tunnel";
+        sock.data.buf = new Uint8Array(0);
+        openTunnel(sock, decision.host, decision.port);
+      },
+      close(sock) {
+        if (sock.data?.timer) clearTimeout(sock.data.timer);
+        sock.data?.upstream?.end();
+      },
+      error(sock, err) {
+        log(`ERROR  client ${err?.message ?? err}`);
+        sock.data?.upstream?.end();
+      },
     },
-    close(sock) {
-      if (sock.data?.timer) clearTimeout(sock.data.timer);
-      sock.data?.upstream?.end();
-    },
-    error(sock, err) {
-      log(`ERROR  client ${err?.message ?? err}`);
-      sock.data?.upstream?.end();
-    },
-  },
-});
+  });
 
-if (ALLOW.size === 0) {
+  if (ALLOW.size === 0) {
+    log(
+      "WARN   SENTINEL_EGRESS_ALLOW is empty — deny-all. Fork-mode PoCs will fail until it is set.",
+    );
+  }
   log(
-    "WARN   SENTINEL_EGRESS_ALLOW is empty — deny-all. Fork-mode PoCs will fail until it is set.",
+    `egress proxy listening on 0.0.0.0:${PORT} · CONNECT-only :443 · allow=[${[...ALLOW].join(", ")}]`,
   );
 }
-log(
-  `egress proxy listening on 0.0.0.0:${PORT} · CONNECT-only :443 · allow=[${[...ALLOW].join(", ")}]`,
-);
+
+if (import.meta.main) serve();
