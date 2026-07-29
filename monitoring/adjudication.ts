@@ -34,6 +34,11 @@ export type PocStatus = z.infer<typeof PocStatus>;
 export const PocSubstrate = z.enum(["airgapped", "fork"]);
 export type PocSubstrate = z.infer<typeof PocSubstrate>;
 
+/** How a finding takes value out of reach. 'freeze'/'liveness' (funds trapped, not stolen) is the class
+ *  the PoC-completeness gate (Gate 3) arms on — the incident's shape. */
+export const ImpactType = z.enum(["drain", "freeze", "liveness", "griefing", "other"]);
+export type ImpactType = z.infer<typeof ImpactType>;
+
 /** One finding as emitted in the report's [SENTINEL-FINDINGS] block. */
 export const Finding = z.object({
   title: z.string(),
@@ -54,6 +59,11 @@ export const Finding = z.object({
   targetAsset: z.string().optional(),
   /** The condition under which the bug is exploitable — the human's discriminator on a Type-2 match. */
   precondition: z.string().optional(),
+  /** Self-classification of impact. 'freeze'/'liveness' (value trapped) arms the PoC-completeness gate. */
+  impactType: ImpactType.optional(),
+  /** freeze/liveness only: EVERY value-out/recovery fn this finding claims is blocked. The PoC must
+   *  CALL each and show it reverting with an on-chain err code, or the green is downgraded. */
+  valueExitPaths: z.array(z.string()).optional(),
 });
 export type Finding = z.infer<typeof Finding>;
 

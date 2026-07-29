@@ -17,6 +17,7 @@ import type { Tier } from "../monitoring/spend-ceiling";
 import { FINDINGS_SCHEMA, KB_DISTILL_SCHEMA } from "./findings";
 import { enforceGates, type GateAction } from "./gates";
 import { type KBCandidate, KBCandidate as KBCandidateSchema } from "./kb-distill";
+import { extractPocCoverage, type PocCoverage } from "./poc-coverage";
 import { FETCH_TOOL, POC_TOOL, sentinelServer } from "./tools";
 
 export type Panel = "minimal" | "full";
@@ -104,10 +105,10 @@ Process (each step ONCE, in order, then stop):
 1. Fetch the target's full source with ${FETCH_TOOL} (closure=true). This is the ONLY way to read source - never use Bash, WebFetch, WebSearch, Read, Grep, or Glob.
 2. ${delegate} In each delegation prompt, PASTE THE FULL fetched source verbatim (the subagent also has ${FETCH_TOOL} as a fallback, but inline it so it doesn't have to). Do NOT spawn any subagent more than once.
 3. Collect the candidate findings, then verify them in a SINGLE verifier Task call: pass the verifier the FULL contract source AND the complete list of candidate findings at once (NOT one call per finding). It refutes false positives under Clarity semantics - especially internal-vs-live-balance accounting (share price off a data-var, not ft-get-balance, defeats donation/inflation), underflow/overflow ABORT, reverts roll back all state, ft-mint?/ft-burn? of 0 reverts. Mark refuted findings verifierVerdict "refuted" (keep them).
-4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE. Choose the substrate: pass substrate="fork" when the bug's exploitability depends on LIVE on-chain state (real balances, roles, share prices, or multi-contract wiring) — it runs the unmodified deployed bytecode against real chain state; pass substrate="airgapped" (the default) for a pure logic bug reproducible from source alone. Set pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE (e.g. fork ran without containment configured — do NOT retry as airgapped unless the finding is genuinely source-only). Set pocSubstrate to the substrate reported in the tool result (substrate=fork|airgapped). Then STOP (never retry, re-verify, or re-delegate).
+4. For each CONFIRMED high/critical, call ${POC_TOOL} AT MOST ONCE. Choose the substrate: pass substrate="fork" when the bug's exploitability depends on LIVE on-chain state (real balances, roles, share prices, or multi-contract wiring) — it runs the unmodified deployed bytecode against real chain state; pass substrate="airgapped" (the default) for a pure logic bug reproducible from source alone. Set pocStatus "green" if it reproduces (exitCode 0), "failed" if not, "pending" if the sandbox is UNAVAILABLE (e.g. fork ran without containment configured — do NOT retry as airgapped unless the finding is genuinely source-only). Set pocSubstrate to the substrate reported in the tool result (substrate=fork|airgapped). If the finding is a fund-freeze/lock/liveness issue, set impactType and list in valueExitPaths EVERY value-out/recovery fn you claim is blocked. Your PoC MUST call each one and show it reverting with its err code, ESTABLISH the locking condition in-run (mine past cooldown / apply the pause / create the shortfall — never assume it), show a control where the SAME asset exits when that condition is absent, and emit one [SENTINEL-POC-COV]{...}[/SENTINEL-POC-COV] line to stdout listing each exit's outcome+errCode, preconditionEstablished, and conditional. Then STOP (never retry, re-verify, or re-delegate).
 5. Return the structured findings object and end your turn. Do not keep working after you have it.
 Label findings honestly: real bug vs centralization/trust.
-A structural gate runs on your output: a "confirmed" verdict from a run that did NOT call the verifier subagent is auto-downgraded to "uncertain", and a confirmed bug at high/critical with pocStatus "na" is forced to "pending". So actually delegate to the verifier and actually run ${POC_TOOL} — you cannot self-certify past the gate.${kbStep}${kbContext}`;
+A structural gate runs on your output: a "confirmed" verdict from a run that did NOT call the verifier subagent is auto-downgraded to "uncertain", and a confirmed bug at high/critical with pocStatus "na" is forced to "pending". So actually delegate to the verifier and actually run ${POC_TOOL} — you cannot self-certify past the gate. For a freeze/liveness finding the gate reconciles your declared valueExitPaths against the PoC's own emitted coverage: any claimed exit not shown reverting-with-a-code, or a precondition you didn't establish in-run, downgrades the green to pending. You cannot self-certify a freeze.${kbStep}${kbContext}`;
 }
 
 function auditOptions(
@@ -200,6 +201,11 @@ export async function audit(
   let subagentTasks = 0;
   // Which subagents actually ran — the evidence the credibility gate reads (not the model's claims).
   const subagentTypes = new Set<string>();
+  // PoC coverage manifests scraped off run_simnet_poc tool results — the DEMONSTRATED value-out coverage
+  // Gate 3 reconciles against a freeze finding's claims (read off the stream, not the model's word).
+  const pocCoverage: PocCoverage[] = [];
+  // tool_use ids of run_simnet_poc calls — correlate the later tool_result back to the PoC tool.
+  const pocToolUseIds = new Set<string>();
   let result: Record<string, unknown> | null = null;
 
   for await (const msg of query({
@@ -209,6 +215,7 @@ export async function audit(
     if (msg.type === "assistant") {
       for (const block of (msg.message?.content ?? []) as Array<{
         type: string;
+        id?: string;
         name?: string;
         input?: { subagent_type?: string };
       }>) {
@@ -218,8 +225,29 @@ export async function audit(
             subagentTasks++;
             if (block.input?.subagent_type) subagentTypes.add(block.input.subagent_type);
           }
+          if (block.name === POC_TOOL && block.id) pocToolUseIds.add(block.id);
           opts.onTool?.(block.name ?? "?", Date.now() - t0);
         }
+      }
+    } else if (msg.type === "user") {
+      // Tool results surface as user-role messages. Scrape the PoC coverage manifest off the
+      // run_simnet_poc result text — DEMONSTRATED coverage, captured off the stream not the model.
+      for (const block of (msg.message?.content ?? []) as Array<{
+        type: string;
+        tool_use_id?: string;
+        content?: unknown;
+      }>) {
+        if (block.type !== "tool_result" || !pocToolUseIds.has(block.tool_use_id ?? "")) continue;
+        const text =
+          typeof block.content === "string"
+            ? block.content
+            : Array.isArray(block.content)
+              ? (block.content as Array<{ type?: string; text?: string }>)
+                  .map((c) => (c.type === "text" ? (c.text ?? "") : ""))
+                  .join("\n")
+              : "";
+        const cov = extractPocCoverage(text);
+        if (cov) pocCoverage.push(cov);
       }
     } else if (msg.type === "result") {
       result = msg as unknown as Record<string, unknown>;
@@ -247,7 +275,7 @@ export async function audit(
   // Credibility gates (structural): downgrade a self-labelled "confirmed" from a run with no verifier
   // pass, and force a bug-tier high/critical with no PoC attempt onto the provisional path. Runs on the
   // evidence of what actually executed — the model cannot self-certify past this.
-  const gate = enforceGates(findings, { subagentTasks, subagentTypes });
+  const gate = enforceGates(findings, { subagentTasks, subagentTypes, pocCoverage });
   findings = gate.findings;
   if (gate.actions.length > 0) {
     console.warn(

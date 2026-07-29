@@ -42,6 +42,18 @@ export const FINDINGS_SCHEMA = {
             description:
               "the condition under which the bug is exploitable (the human's discriminator on a runtime match)",
           },
+          impactType: {
+            type: "string",
+            enum: ["drain", "freeze", "liveness", "griefing", "other"],
+            description:
+              "impact kind; 'freeze'/'liveness' (funds trapped) triggers the PoC-completeness gate",
+          },
+          valueExitPaths: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "freeze/liveness ONLY: every value-out fn you claim is blocked — your PoC must call each and show it reverting with an err code, or the green is downgraded to pending",
+          },
         },
         required: [
           "title",

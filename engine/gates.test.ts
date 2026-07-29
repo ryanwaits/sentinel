@@ -5,7 +5,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { Finding } from "../monitoring/adjudication";
-import { enforceGates, verifierRan } from "./gates";
+import { enforceGates, type RunEvidence, verifierRan } from "./gates";
+import type { PocCoverage } from "./poc-coverage";
 
 const f = (over: Partial<Finding> = {}): Finding => ({
   title: "finding",
@@ -23,6 +24,26 @@ const ev = (
 ): { subagentTasks: number; subagentTypes: Set<string> } => ({
   subagentTasks,
   subagentTypes: new Set(types),
+});
+
+/** A PoC coverage manifest, defaulted to the fixture finding's title. */
+const cov = (over: Partial<PocCoverage> = {}): PocCoverage => ({
+  finding: "finding",
+  exits: [],
+  preconditionEstablished: false,
+  conditional: false,
+  ...over,
+});
+
+/** RunEvidence carrying pocCoverage for the Gate 3 cases. */
+const evc = (
+  tasks: number,
+  types: string[] = [],
+  pocCoverage: PocCoverage[] = [],
+): RunEvidence => ({
+  subagentTasks: tasks,
+  subagentTypes: new Set(types),
+  pocCoverage,
 });
 
 describe("verifierRan", () => {
@@ -91,6 +112,145 @@ describe("Gate 2 — PoC attempt required", () => {
     const r = enforceGates([f({ pocStatus: "green" })], ev(4, ["verifier"]));
     expect(r.findings[0].pocStatus).toBe("green");
     expect(r.actions).toHaveLength(0);
+  });
+});
+
+describe("Gate 3 — PoC completeness", () => {
+  const freeze = (over: Partial<Finding> = {}) =>
+    f({ impactType: "freeze", valueExitPaths: ["redeem"], ...over });
+
+  test("a complete freeze passes untouched", () => {
+    const r = enforceGates(
+      [freeze()],
+      evc(
+        4,
+        ["verifier"],
+        [cov({ exits: [{ fn: "redeem", outcome: "reverted", errCode: "u801012" }] })],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("green");
+    expect(r.findings[0].verifierVerdict).toBe("confirmed");
+    expect(r.actions).toHaveLength(0);
+  });
+
+  test("#V2 shape: a claimed exit the PoC never called → downgrade", () => {
+    const r = enforceGates(
+      [freeze({ valueExitPaths: ["fund-claim"] })],
+      evc(
+        4,
+        ["verifier"],
+        [cov({ exits: [{ fn: "cancel-redeem", outcome: "reverted", errCode: "u1" }] })],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.findings[0].verifierVerdict).toBe("uncertain");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("a claimed exit that returns ok → downgrade", () => {
+    const r = enforceGates(
+      [freeze({ valueExitPaths: ["fund-claim"] })],
+      evc(4, ["verifier"], [cov({ exits: [{ fn: "fund-claim", outcome: "ok", errCode: null }] })]),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("a claimed exit that reverts with a null errCode → downgrade", () => {
+    const r = enforceGates(
+      [freeze({ valueExitPaths: ["fund-claim"] })],
+      evc(
+        4,
+        ["verifier"],
+        [cov({ exits: [{ fn: "fund-claim", outcome: "reverted", errCode: null }] })],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("an empty valueExitPaths on a freeze → downgrade (proves nothing)", () => {
+    const r = enforceGates(
+      [freeze({ valueExitPaths: [] })],
+      evc(
+        4,
+        ["verifier"],
+        [cov({ exits: [{ fn: "redeem", outcome: "reverted", errCode: "u1" }] })],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("precondition set but not established in-run → downgrade (assumed-premise)", () => {
+    const r = enforceGates(
+      [freeze({ precondition: "guardian paused" })],
+      evc(
+        4,
+        ["verifier"],
+        [
+          cov({
+            exits: [{ fn: "redeem", outcome: "reverted", errCode: "u1" }],
+            preconditionEstablished: false,
+          }),
+        ],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.findings[0].verifierVerdict).toBe("uncertain");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("no coverage manifest for a freeze-green → fail-closed downgrade", () => {
+    const r = enforceGates([freeze()], evc(4, ["verifier"], []));
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.actions[0].rule).toBe("poc-incomplete");
+  });
+
+  test("conditional exits but a blanket headline (no precondition) → downgrade", () => {
+    const r = enforceGates(
+      [freeze()], // no precondition
+      evc(
+        4,
+        ["verifier"],
+        [cov({ exits: [{ fn: "redeem", outcome: "reverted", errCode: "u1" }], conditional: true })],
+      ),
+    );
+    expect(r.findings[0].pocStatus).toBe("pending");
+    expect(r.findings[0].verifierVerdict).toBe("uncertain");
+    expect(r.actions[0].rule).toBe("conditional-impact-unstated");
+  });
+
+  test("regression: a drain finding is untouched (Gate 3 opt-in by impactType)", () => {
+    const r = enforceGates(
+      [f({ impactType: "drain", pocStatus: "green" })],
+      evc(4, ["verifier"], []),
+    );
+    expect(r.findings[0].pocStatus).toBe("green");
+    expect(r.actions).toHaveLength(0);
+  });
+
+  test("regression: impactType unset is untouched (finding-1 shape)", () => {
+    const r = enforceGates([f()], evc(4, ["verifier"], []));
+    expect(r.findings[0].pocStatus).toBe("green");
+    expect(r.actions).toHaveLength(0);
+  });
+
+  test("regression: a centralization+freeze is untouched (class ≠ bug)", () => {
+    const r = enforceGates(
+      [f({ class: "centralization", impactType: "freeze" })],
+      evc(4, ["verifier"], []),
+    );
+    expect(r.findings[0].pocStatus).toBe("green");
+    expect(r.actions).toHaveLength(0);
+  });
+
+  test("ordering: an unverified freeze hits Gate 1 only, not Gate 3", () => {
+    const r = enforceGates([freeze()], evc(0));
+    expect(r.findings[0].verifierVerdict).toBe("uncertain"); // Gate 1
+    expect(r.findings[0].pocStatus).toBe("green"); // Gate 3 never fired (no longer confirmed)
+    expect(r.actions).toHaveLength(1);
+    expect(r.actions[0].rule).toBe("unverified-downgrade");
   });
 });
 

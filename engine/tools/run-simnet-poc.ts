@@ -38,6 +38,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { extractPocCoverage, POC_COV_CLOSE, POC_COV_OPEN } from "../poc-coverage";
 
 const IMAGE = process.env.SENTINEL_SANDBOX_IMAGE ?? "audit-sentinel-simnet:local";
 const SAFE_POC = /^[a-z0-9][a-z0-9/_-]*\.ts$/;
@@ -141,6 +142,7 @@ export const runSimnetPocTool = tool(
     "Reproduce a confirmed finding by running a Clarity simnet PoC in the isolated sandbox. Never touches mainnet; nothing is ever broadcast.",
     "Choose a substrate. 'airgapped' (default, --network none, zero egress): your PoC deploys contract source you fetched, plus stubs — right for logic bugs. 'fork': clarinet remote_data reads the UNMODIFIED deployed bytecode and REAL chain state (live balances, roles, prices) at a pinned height; use it when the bug depends on live state, or to produce the strongest possible evidence for a confirmed finding. In fork mode do NOT deploy anything: call initSimnet(process.env.SENTINEL_FORK_MANIFEST) and call the real contracts by their mainnet ids, sending as any real principal (no keys needed).",
     "Provide `pocSource` (self-contained TS, exits non-zero if the bug doesn't reproduce) for a NEW finding, or `pocFile` for a baked PoC. Patterns: poc/finding-1.ts (airgapped), poc/hermetica-v2-express-lock-fork.ts (fork).",
+    'For a FREEZE/LOCK/LIVENESS finding the PoC MUST call EVERY value-out/recovery fn you claim is blocked, show each reverting with its on-chain err code, ESTABLISH the locking condition in-run (mine past cooldown / apply the pause / create the shortfall — never assume it), and print exactly one line to stdout: [SENTINEL-POC-COV]{"finding":"<exact Finding.title>","exits":[{"fn":"redeem","outcome":"reverted","errCode":"u801012"}],"preconditionEstablished":true,"conditional":true}[/SENTINEL-POC-COV]. A structural gate reconciles that manifest against the finding\'s valueExitPaths; an uncalled/ok exit or an unestablished precondition downgrades the green.',
     "If the sandbox is unavailable, set pocStatus 'pending' (do NOT retry).",
   ].join(" "),
   {
@@ -255,6 +257,11 @@ export const runSimnetPocTool = tool(
       }
       const exitCode = result.status ?? 1;
       const reproduced = exitCode === 0;
+      // Scan the FULL stdout for the freeze-PoC coverage manifest BEFORE truncating to the tail, then
+      // append it verbatim so it survives onto the SDK stream and Gate 3 reads DEMONSTRATED coverage
+      // (which value-out fns were called + each outcome), not the model's transcription.
+      const cov = extractPocCoverage(result.stdout); // validated; null if absent/malformed
+      const covBlock = cov ? `\n${POC_COV_OPEN}${JSON.stringify(cov)}${POC_COV_CLOSE}` : "";
       const tail = (result.stdout + (result.stderr ? `\n[stderr]\n${result.stderr}` : ""))
         .split("\n")
         .slice(-12)
@@ -270,7 +277,7 @@ export const runSimnetPocTool = tool(
         content: [
           {
             type: "text",
-            text: `reproduced=${reproduced} exitCode=${exitCode} (pocStatus ${reproduced ? "green" : "failed"}) ${provenance}\n${tail}`,
+            text: `reproduced=${reproduced} exitCode=${exitCode} (pocStatus ${reproduced ? "green" : "failed"}) ${provenance}${covBlock}\n${tail}`,
           },
         ],
       };
