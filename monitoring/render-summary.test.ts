@@ -68,4 +68,24 @@ describe("templateSummary", () => {
     expect(s.toLowerCase()).toContain("uncertain");
     expect(s).toContain("empty-bin swap freeze");
   });
+
+  test("incident origin is DETECTION copy — correlation, precondition, not a confirmed exploit", () => {
+    const s = templateSummary(
+      adj([
+        {
+          title: 'Possible exploitation of "socialize-debt forces unbounded LP loss"',
+          severity: "high",
+          class: "bug",
+          verifierVerdict: "uncertain",
+          pocStatus: "na",
+          origin: "incident",
+          precondition: "amount uncapped / total-assets collapsing",
+        },
+      ]),
+    );
+    expect(s).toMatch(/^DETECTION — already on-chain/);
+    expect(s.toLowerCase()).toContain("correlation");
+    expect(s).toContain("amount uncapped");
+    expect(s).not.toContain("PoC reproduces green");
+  });
 });

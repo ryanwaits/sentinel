@@ -95,6 +95,12 @@ describe("buildPayload", () => {
     expect(p.summary).toBe("the summary prose");
     expect(p.event).toBe("sentinel_alert");
     expect(p.disclosure).toContain("human-gated");
+    expect(p.origin).toBe("audit");
+  });
+
+  test("incident origin is DETECTION (already on-chain), not a re-audit", () => {
+    const p = buildPayload(adj("bp-det", { origin: "incident" }), "WARN", "detection prose");
+    expect(p.origin).toBe("incident");
   });
 });
 

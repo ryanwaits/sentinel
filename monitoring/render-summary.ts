@@ -28,6 +28,9 @@ Rules:
 - Name the ONE thing worth acting on. State severity in a clause; one honest caveat, then move on.
 - Be honest about uncertainty: if a finding is "uncertain" or a read was degraded, say so plainly —
   never smooth it into "clean". A monitoring correlation is "looks like", not a reproduced exploit.
+- If motion is "detection", open with "DETECTION — already on-chain." Correlation, not confirmation.
+  Name the precondition to verify. Do not claim a PoC on the event. If motion is "prevention", it is
+  an audit of incoming/new code (veto if a timelock remains).
 - Never imply Sentinel took any action — it routes intent to a human; it never acts on-chain or discloses.
 - If there's a fix, one line naming the change. Do NOT narrate the PoC.
 - Active voice. No hedging ("we would note that"), no em dashes.
@@ -44,12 +47,16 @@ function factsFor(adj: Adjudication): string {
     class: f.class,
     verdict: f.verifierVerdict,
     pocStatus: f.pocStatus,
+    origin: f.origin,
+    precondition: f.precondition,
     blastRadius: f.blastRadius,
     recommendedAction: f.recommendedAction,
   }));
   return JSON.stringify(
     {
       contractId: adj.contractId,
+      origin: adj.origin ?? "audit",
+      motion: (adj.origin ?? "audit") === "incident" ? "detection" : "prevention",
       overallSeverity: adj.severity,
       overallClass: adj.class,
       pocStatus: adj.pocStatus,
@@ -111,6 +118,21 @@ export function templateSummary(adj: Adjudication): string {
   )[0];
 
   const lines: string[] = [];
+  if ((adj.origin ?? "audit") === "incident") {
+    const lead =
+      adj.findings.find((f) => f.origin === "incident" && f.class === "bug") ??
+      adj.findings.find((f) => f.kept) ??
+      adj.findings[0];
+    lines.push(
+      `DETECTION — already on-chain. ${adj.contractId}: ${lead?.title ?? "runtime event"} (${lead?.severity ?? adj.severity}).`,
+    );
+    lines.push(
+      "Correlation, not confirmation. A watched path fired — verify THIS event hit the precondition, not a routine authorized op.",
+    );
+    if (lead?.precondition) lines.push(`Precondition to verify: ${lead.precondition}.`);
+    lines.push("Disclosure human-gated — no automated action taken.");
+    return lines.join("\n");
+  }
   if (bugs.length > 0) {
     lines.push(`${adj.contractId}: ${bugs[0].title} (${bugs[0].severity}).`);
   } else if (confirmed.length > 0) {

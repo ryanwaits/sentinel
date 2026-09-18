@@ -1,10 +1,9 @@
 /**
  * KB / context store — the audit ↔ config ↔ incident loop (component 5), MVP slice.
  *
- * Persists what an audit learned about a contract, keyed by `contractId`, as a git-checked JSON
- * record under `sentinel/kb/` (NOT the gitignored `.sentinel/` runtime dir). `deriveConfig`
- * turns a record into a `MonitoringConfig` — pure judgment, no chain dependency. Seeded from the
- * two `reports/*.md` audits.
+ * Persists what an audit learned about a contract, keyed by `contractId`.
+ * Live watches: `.sentinel/kb/` (gitignored runtime). Playground fixtures: `sentinel/examples/kb/`
+ * (in git; tests + `bun run examples`). `deriveConfig` is pure judgment, no chain dependency.
  *
  * Full version also holds stateful baselines (windowed outflow-rate / total-assets-% an absolute
  * filter can't express); MVP captures the static facts: archetype, call-graph closure, sensitive
@@ -25,7 +24,7 @@ import {
 } from "./config";
 import { Network, networkOf } from "./network";
 
-export const KB_DIR = process.env.SENTINEL_KB_DIR ?? join(process.cwd(), "sentinel", "kb");
+export const KB_DIR = process.env.SENTINEL_KB_DIR ?? join(process.cwd(), ".sentinel", "kb");
 
 /** A confirmed finding from a prior audit — carried forward so the next audit re-validates (and
  *  reproduces) it instead of re-deriving its severity/class from scratch (the calibration anchor).
@@ -40,6 +39,7 @@ export const PriorFinding = z.object({
   /** Type-2 detection signature distilled from this finding (the bug becomes a monitoring signal). */
   signature: FindingSignature.optional(),
 });
+export type PriorFinding = z.infer<typeof PriorFinding>;
 
 /** What an audit recorded about one contract. Source of truth for `deriveConfig`. */
 export const KBRecord = z.object({
@@ -68,7 +68,7 @@ function recordPath(contractId: string): string {
   return join(KB_DIR, `${contractId}.json`);
 }
 
-/** Write a KB record to `sentinel/kb/<contractId>.json` (validated; creates the dir). */
+/** Write a KB record to KB_DIR (validated; creates the dir). Live default: `.sentinel/kb/`. */
 export function saveRecord(record: KBRecord): void {
   mkdirSync(KB_DIR, { recursive: true });
   writeFileSync(
@@ -100,7 +100,7 @@ export function listRecords(): KBRecord[] {
     throw err;
   }
   return names
-    .filter((n) => n.endsWith(".json"))
+    .filter((n) => n.endsWith(".json") && !n.startsWith("."))
     .map((n) => KBRecord.parse(JSON.parse(readFileSync(join(KB_DIR, n), "utf8"))));
 }
 

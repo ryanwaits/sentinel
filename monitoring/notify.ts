@@ -73,6 +73,8 @@ export function buildPayload(adj: Adjudication, level: string, summary: string) 
     suppressed: adj.suppressed,
     recommendedAction: adj.recommendedAction,
     tokenCostUsd: adj.tokenCostUsd,
+    /** audit = PREVENTION (new code / re-audit); incident = DETECTION (already on-chain). */
+    origin: adj.origin ?? "audit",
     keptFindings: adj.findings
       .filter((f) => f.kept)
       .map((f) => ({ title: f.title, severity: f.severity, class: f.class })),
