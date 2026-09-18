@@ -37,7 +37,7 @@ import { buildDirective, tierFor } from "../monitoring/directive";
 import { triageTrigger } from "../monitoring/incident-triage";
 import { deriveConfig } from "../monitoring/kb";
 import { isValidContractId, networkOf } from "../monitoring/network";
-import { type ChainEventBody, classify } from "../monitoring/prefilter";
+import { type ChainEventBody, classifyMaybe } from "../monitoring/prefilter";
 import { renderSummary } from "../monitoring/render-summary";
 import { verifySignature } from "../monitoring/sources/trigger-source";
 import { reserve, type Tier } from "../monitoring/spend-ceiling";
@@ -165,7 +165,7 @@ async function handleTransfer(
     markHandled(webhookId);
     return new Response("duplicate event", { status: 200 });
   }
-  const verdict = classify(fn, event);
+  const verdict = await classifyMaybe(fn, event);
   if (!verdict.notable) {
     console.log(`[bridge] benign outflow ${contractId} (${asset}): ${verdict.reason} — no spend`);
     markHandled(webhookId);
@@ -270,7 +270,7 @@ export async function handle(req: Request): Promise<Response> {
   }
 
   // 6) PRE-FILTER — benign ⇒ log + 204, ZERO spend.
-  const verdict = classify(fn, event);
+  const verdict = await classifyMaybe(fn, event);
   if (!verdict.notable) {
     console.log(`[bridge] benign ${contractId}.${fnName}: ${verdict.reason} — no spend`);
     markHandled(webhookId);

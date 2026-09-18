@@ -7,7 +7,10 @@
   "scripts": {
     "poc:finding-1": "bun run simnet/poc/finding-1.ts",
     "typecheck": "tsc --noEmit",
-    "test": "SENTINEL_AUDIT_MOCK=1 SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/ deploy/",
+    "test": "SENTINEL_AUDIT_MOCK=1 SENTINEL_KB_DIR=sentinel/examples/kb SENTINEL_SINK_DIR=$(mktemp -d) bun test monitoring/ webhooks/ engine/ deploy/",
+    "examples": "SENTINEL_KB_DIR=sentinel/examples/kb bun run monitoring/kb.ts",
+    "examples:load": "mkdir -p .sentinel/kb && cp sentinel/examples/kb/*.json .sentinel/kb/",
+    "examples:personas": "SENTINEL_KB_DIR=sentinel/examples/kb bun run monitoring/jev-personas.ts",
     "audit": "bun run engine/run.ts",
     "discover": "bun run engine/discover.ts",
     "distill": "bun run engine/distill.ts",
@@ -27,6 +30,7 @@
     "@secondlayer/stacks": "^2.11.0",
     "@secondlayer/subgraphs": "^3.16.0",
     "@stacks/clarinet-sdk": "^3.22.0",
+    "@typesafe-ai/sdk": "0.6.0",
     "zod": "^4.4.3"
   },
   "engines": {

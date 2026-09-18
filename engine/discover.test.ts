@@ -3,7 +3,7 @@
  * the live Index + node and are exercised by the CLI (`bun run discover`), not here.
  */
 import { describe, expect, test } from "bun:test";
-import { type AssetHolding, rankTargets } from "./discover";
+import { type AssetHolding, annotateTargets, rankTargets } from "./discover";
 
 const h = (symbol: string, amount: string, usdV: number | null): AssetHolding => ({
   asset: symbol,
@@ -48,5 +48,28 @@ describe("rankTargets", () => {
       Array.from({ length: 5 }, (_, i) => [`SP.c${i}`, [h("STX", "1", (i + 1) * 10)]]),
     );
     expect(rankTargets(m, 2)).toHaveLength(2);
+  });
+});
+
+describe("annotateTargets", () => {
+  test("USD order unchanged; high-conf Jev adds tier/surface", async () => {
+    const ranked = rankTargets(
+      new Map([
+        ["SP.a.vault", [h("sBTC", "1", 5000)]],
+        ["SP.b.pool", [h("sBTC", "1", 20000)]],
+      ]),
+      10,
+    );
+    const out = await annotateTargets(ranked, async () => ({
+      byId: {
+        "SP.b.pool": { tier: "deep", surface: "high", confidence: 0.9 },
+        "SP.a.vault": { tier: "monitor", surface: "medium", confidence: 0.4 },
+      },
+      inputTokens: 20,
+    }));
+    expect(out.map((t) => t.contractId)).toEqual(["SP.b.pool", "SP.a.vault"]);
+    expect(out[0]?.tier).toBe("deep");
+    expect(out[0]?.attackSurface).toBe("high");
+    expect(out[1]?.tier).toBeUndefined(); // below floor
   });
 });

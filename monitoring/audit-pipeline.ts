@@ -7,8 +7,7 @@
  * (audits take minutes); the bridge fires it and returns 202.
  */
 import { audit } from "../engine/audit";
-import type { Adjudication } from "./adjudication";
-import { adjudicateFindings } from "./adjudication";
+import { type Adjudication, adjudicateFindings, resolveWaivers } from "./adjudication";
 import { tierForArchetype } from "./config";
 import { loadRecord } from "./kb";
 import { networkOf } from "./network";
@@ -49,6 +48,7 @@ export async function runTrigger(ctx: TriggerContext): Promise<void> {
     findings: result.findings,
     tokenCostUsd: result.metrics.costUsd,
     waivers: kb?.waivers,
+    waived: await resolveWaivers(result.findings, kb?.waivers),
   });
 
   await notify(adjudication);
@@ -98,6 +98,7 @@ export async function runAuditRequest(
     findings: result.findings,
     tokenCostUsd: result.metrics.costUsd,
     waivers: kb?.waivers,
+    waived: await resolveWaivers(result.findings, kb?.waivers),
   });
   await notify(adjudication);
   if (result.metrics.costUsd > 0) reconcile(TIER_ESTIMATE_USD[tier], result.metrics.costUsd);

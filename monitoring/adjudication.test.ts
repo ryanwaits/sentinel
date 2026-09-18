@@ -2,7 +2,13 @@
  * Adjudication tests — deterministic verdict from a report's [SENTINEL-FINDINGS] block. No spend.
  */
 import { describe, expect, test } from "bun:test";
-import { adjudicate, adjudicateFindings, extractFindings, type Finding } from "./adjudication";
+import {
+  adjudicate,
+  adjudicateFindings,
+  extractFindings,
+  type Finding,
+  resolveWaivers,
+} from "./adjudication";
 
 describe("rollup: severity + class both come from the worst-severity kept finding", () => {
   const f = (over: Partial<Finding>): Finding => ({
@@ -181,6 +187,83 @@ describe("adjudicate", () => {
     expect(a.alertLevel).toBe("none");
   });
 
+  test("waived[] overlay suppresses even when substring would miss", () => {
+    const a = adjudicateFindings({
+      sessionId: "s",
+      contractId: "x",
+      tokenCostUsd: 0,
+      findings: [
+        {
+          title: "owner can pause",
+          severity: "medium",
+          class: "centralization",
+          verifierVerdict: "confirmed",
+          pocStatus: "na",
+          origin: "audit",
+        },
+      ],
+      waived: [true],
+    });
+    expect(a.findings[0]?.disposition).toBe("waived");
+    expect(a.alertLevel).toBe("none");
+  });
+});
+
+describe("resolveWaivers", () => {
+  const centralization: Finding = {
+    title: "admin can set the fee",
+    severity: "medium",
+    class: "centralization",
+    verifierVerdict: "confirmed",
+    pocStatus: "na",
+    origin: "audit",
+  };
+  const waivers = [{ finding: "owner pause is by design", label: "by-design" as const }];
+
+  test("null Jev → substring heuristic", async () => {
+    const flags = await resolveWaivers([centralization], waivers, async () => null);
+    expect(flags).toEqual([false]);
+  });
+
+  test("high-conf covers → waive (semantic match substring missed)", async () => {
+    const flags = await resolveWaivers([centralization], waivers, async () => ({
+      byIndex: { 0: { covers: true, confidence: 0.9 } },
+      inputTokens: 8,
+    }));
+    expect(flags).toEqual([true]);
+  });
+
+  test("low-conf covers → keep heuristic (do not drop an alert cheaply)", async () => {
+    const flags = await resolveWaivers([centralization], waivers, async () => ({
+      byIndex: { 0: { covers: true, confidence: 0.4 } },
+      inputTokens: 8,
+    }));
+    expect(flags).toEqual([false]);
+  });
+
+  test("high-conf does-not-cover un-waives a substring false-positive", async () => {
+    const overlapping: Finding = {
+      ...centralization,
+      title: "owner pause is by design extra words",
+    };
+    const flags = await resolveWaivers([overlapping], waivers, async () => ({
+      byIndex: { 0: { covers: false, confidence: 0.9 } },
+      inputTokens: 8,
+    }));
+    expect(flags).toEqual([false]);
+  });
+
+  test("bugs stay unwaived even if Jev says covers", async () => {
+    const bug: Finding = { ...centralization, class: "bug", title: "drain" };
+    const flags = await resolveWaivers([bug], waivers, async () => ({
+      byIndex: { 0: { covers: true, confidence: 0.99 } },
+      inputTokens: 8,
+    }));
+    expect(flags).toEqual([false]);
+  });
+});
+
+describe("adjudicate (rest)", () => {
   test("recommendedAction always notes disclosure is human-gated", () => {
     const r = report([
       {

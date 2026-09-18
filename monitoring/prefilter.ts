@@ -22,6 +22,7 @@
  */
 import { decodeClarityValue } from "@secondlayer/sdk";
 import type { SensitiveFn } from "./config";
+import { type ClassifyFailSafe, classifyFailSafe, jevDropFloor } from "./jev";
 
 /** The decoded chain event carried under the webhook envelope's `event`. The bridge normalizes the
  *  raw delivery into this flat shape (secondlayer uses `event_type` + sometimes a nested `payload`;
@@ -164,4 +165,53 @@ export function classify(fn: SensitiveFn, event: ChainEventBody): PrefilterVerdi
         reason: `unhandled trigger class ${fn.triggerClass} — audit (fail-safe)`,
       };
   }
+}
+
+export function isFailSafe(verdict: PrefilterVerdict): boolean {
+  return verdict.notable && verdict.reason.includes("fail-safe");
+}
+
+/**
+ * `classify`, then Jev on fail-safe notables only. Jev may DROP (notable→benign) when confidence
+ * clears the drop floor (default 0.85). It cannot promote a threshold-benign event, and it cannot
+ * un-notable governance. Failure / abstain → keep the fail-safe (spend).
+ */
+export async function classifyMaybe(
+  fn: SensitiveFn,
+  event: ChainEventBody,
+  classifyFs: ClassifyFailSafe = classifyFailSafe,
+): Promise<PrefilterVerdict> {
+  const verdict = classify(fn, event);
+  if (!isFailSafe(verdict)) return verdict;
+  const decision = await classifyFs({
+    triggerClass: fn.triggerClass,
+    reason: verdict.reason,
+    fnName: fn.name,
+    hasThreshold: Boolean(fn.outflowThreshold),
+    event: {
+      type: event.type,
+      amount: event.amount,
+      recipient: event.recipient,
+      sender: event.sender,
+      function_name: event.function_name,
+    },
+  });
+  if (!decision) return verdict;
+  const floor = jevDropFloor();
+  if (!decision.notable && decision.confidence >= floor) {
+    console.log(
+      `[jev] fail-safe drop ${fn.name} conf=${decision.confidence.toFixed(2)} tokens=${decision.inputTokens}`,
+    );
+    return {
+      ...verdict,
+      notable: false,
+      reason: `${verdict.reason} — Jev benign (conf ${decision.confidence.toFixed(2)})`,
+    };
+  }
+  if (decision.confidence < floor) {
+    console.log(
+      `[jev] fail-safe keep ${fn.name} conf=${decision.confidence.toFixed(2)} < ${floor}`,
+    );
+  }
+  return verdict;
 }

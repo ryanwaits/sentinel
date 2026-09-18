@@ -12,9 +12,11 @@
  *  - roll up an overall severity / class / alert level / recommended action + the real token cost.
  *
  * Disclosure stays HUMAN-GATED: this produces an internal alert verdict only — never an action.
- * Pure + deterministic (state/idempotency live in notify.ts), so it unit-tests without chain/spend.
+ * Pure + deterministic by default (state/idempotency live in notify.ts). Optional `waived[]` lets a
+ * caller overlay Jev on waiver matching; omit it and the fuzzy substring heuristic runs.
  */
 import { z } from "zod";
+import { jevConfidenceFloor, jevWaiveFloor, type MatchWaivers, matchWaivers } from "./jev";
 import type { KBRecord } from "./kb";
 import type { TriggerRecord } from "./trigger-state";
 
@@ -138,7 +140,7 @@ function normalize(s: string): string {
 }
 
 /** A non-bug finding is waived if its text overlaps an accepted KB waiver. Fuzzy substring match. */
-function matchesWaiver(finding: Finding, waivers: KBRecord["waivers"]): boolean {
+export function matchesWaiver(finding: Finding, waivers: KBRecord["waivers"]): boolean {
   if (finding.class === "bug") return false; // a real bug is never waived away
   const hay = normalize(`${finding.title} ${finding.blastRadius ?? ""}`);
   return waivers.some((w) => {
@@ -194,21 +196,49 @@ export function adjudicate(input: {
  * Adjudicate findings DIRECTLY (the Agent-SDK path: `engine/audit` returns validated findings, so
  * there's no report text to parse). `adjudicate({report})` parses then calls this.
  */
+/**
+ * Heuristic substring match, overlaid by Jev when confidence clears the floor.
+ * Waiving (dropping an alert) needs the higher waive floor; un-waiving a false substring
+ * match uses the overlay floor. Bugs are never waived.
+ */
+export async function resolveWaivers(
+  findings: Finding[],
+  waivers: KBRecord["waivers"] = [],
+  match: MatchWaivers = matchWaivers,
+): Promise<boolean[]> {
+  const heuristic = findings.map((f) => matchesWaiver(f, waivers));
+  if (waivers.length === 0 || findings.every((f) => f.class === "bug")) return heuristic;
+  const jev = await match(findings, waivers);
+  if (!jev) return heuristic;
+  const overlay = jevConfidenceFloor();
+  const waiveAt = jevWaiveFloor();
+  return findings.map((f, i) => {
+    if (f.class === "bug") return false;
+    const j = jev.byIndex[i];
+    if (!j) return heuristic[i] ?? false;
+    if (j.covers) return j.confidence >= waiveAt ? true : (heuristic[i] ?? false);
+    return j.confidence >= overlay ? false : (heuristic[i] ?? false);
+  });
+}
+
 export function adjudicateFindings(input: {
   sessionId: string;
   contractId: string;
   findings: Finding[];
   tokenCostUsd: number;
   waivers?: KBRecord["waivers"];
+  /** Per-finding waive flags (from `resolveWaivers`). Omit → substring heuristic. */
+  waived?: boolean[];
 }): Adjudication {
   const { sessionId, contractId, tokenCostUsd } = input;
   const waivers = input.waivers ?? [];
 
-  const adjudicated: AdjudicatedFinding[] = input.findings.map((f) => {
+  const adjudicated: AdjudicatedFinding[] = input.findings.map((f, i) => {
     if (f.verifierVerdict === "refuted") {
       return { ...f, kept: false, disposition: "refuted", provisional: false };
     }
-    if (matchesWaiver(f, waivers)) {
+    const waive = input.waived ? Boolean(input.waived[i]) : matchesWaiver(f, waivers);
+    if (waive) {
       return { ...f, kept: false, disposition: "waived", provisional: false };
     }
     const provisional =

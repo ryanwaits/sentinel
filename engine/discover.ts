@@ -17,7 +17,9 @@
  */
 import { SecondLayer } from "@secondlayer/sdk";
 import { PRICED_AS_OF, symbol, usd } from "../agent/pricing";
+import type { Tier } from "../monitoring/config";
 import { SecondLayerObservationReader } from "../monitoring/invariant";
+import { type ClassifyPriority, classifyPriority, jevConfidenceFloor } from "../monitoring/jev";
 import { listRecords } from "../monitoring/kb";
 import { networkOf, resolveNodeUrl } from "../monitoring/network";
 
@@ -27,7 +29,14 @@ const SBTC_ASSET = `${SBTC_CONTRACT}::sbtc-token`;
 
 export type DiscoverMode = "index" | "seed-stub";
 export type AssetHolding = { asset: string; symbol: string; amount: string; usd: number | null };
-export type Target = { contractId: string; usdAtRisk: number; holdings: AssetHolding[] };
+export type Target = {
+  contractId: string;
+  usdAtRisk: number;
+  holdings: AssetHolding[];
+  /** Jev annotation — never reorders the USD rank. */
+  tier?: Tier;
+  attackSurface?: "high" | "medium" | "low";
+};
 export type DiscoverResult = {
   mode: DiscoverMode;
   pricedAsOf: string;
@@ -110,6 +119,28 @@ export function rankTargets(byContract: Map<string, AssetHolding[]>, limit: numb
   return targets.slice(0, limit);
 }
 
+/** Overlay Jev tier/surface onto a USD-ranked list. Rank order is unchanged. */
+export async function annotateTargets(
+  targets: Target[],
+  classify: ClassifyPriority = classifyPriority,
+): Promise<Target[]> {
+  if (targets.length === 0) return targets;
+  const jev = await classify(
+    targets.map((t) => ({
+      contractId: t.contractId,
+      usdAtRisk: t.usdAtRisk,
+      holdings: t.holdings.map((h) => ({ symbol: h.symbol, amount: h.amount, usd: h.usd })),
+    })),
+  );
+  if (!jev) return targets;
+  const floor = jevConfidenceFloor();
+  return targets.map((t) => {
+    const o = jev.byId[t.contractId];
+    if (!o || o.confidence < floor) return t;
+    return { ...t, tier: o.tier, attackSurface: o.surface };
+  });
+}
+
 /**
  * Rank value-holding contracts by $-at-risk. `window` = how many recent sBTC transfers to scan for
  * candidates. Falls back to a labelled `seed-stub` (KB-only) if the Index is unreachable — never a
@@ -145,7 +176,7 @@ export async function discoverTargets(
     }
   }
 
-  const targets = rankTargets(byContract, limit);
+  const targets = await annotateTargets(rankTargets(byContract, limit));
   const note =
     mode === "index"
       ? `${candidates.length} candidates (recent sBTC recipients + KB); balances read live; ranked by curated USD (as of ${PRICED_AS_OF}, ranking-grade, not an oracle).`
@@ -172,6 +203,9 @@ if (import.meta.main) {
     const holds = t.holdings
       .map((h) => `${h.symbol}${h.usd == null ? " (unpriced)" : ""}`)
       .join(", ");
-    console.log(`  ${fmtUsd(t.usdAtRisk).padStart(8)}  ${t.contractId}\n            ${holds}`);
+    const jev = t.tier || t.attackSurface ? `  jev ${t.tier ?? "?"}/${t.attackSurface ?? "?"}` : "";
+    console.log(
+      `  ${fmtUsd(t.usdAtRisk).padStart(8)}  ${t.contractId}\n            ${holds}${jev}`,
+    );
   }
 }

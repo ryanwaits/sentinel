@@ -9,7 +9,7 @@
  * actually alert; the scheduler (Tier 2) then calls `runInvariantRegistry` on a cadence.
  */
 import { createHash } from "node:crypto";
-import { adjudicateFindings } from "./adjudication";
+import { adjudicateFindings, resolveWaivers } from "./adjudication";
 import {
   evaluateAndRecord,
   type Invariant,
@@ -64,6 +64,7 @@ export async function runInvariant(
     findings,
     tokenCostUsd: 0,
     waivers: kb?.waivers,
+    waived: await resolveWaivers(findings, kb?.waivers),
   });
   const res = await notify(adjudication);
 

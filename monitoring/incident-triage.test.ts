@@ -6,7 +6,8 @@
 import { describe, expect, test } from "bun:test";
 import { adjudicateFindings } from "./adjudication";
 import type { MonitoringConfig } from "./config";
-import { type TriageContext, triageFindings } from "./incident-triage";
+import { refineAnomaly, type TriageContext, triageFindings } from "./incident-triage";
+import type { AnomalyDecision, ClassifyAnomaly } from "./jev";
 import type { ChainEventBody, PrefilterVerdict } from "./prefilter";
 
 const C = "SP.x.vault";
@@ -161,5 +162,66 @@ describe("triageFindings — baseline-aware anomaly severity", () => {
     expect(passthrough(fs)?.severity).toBe("high");
     expect(passthrough(fs)?.recommendedAction).toContain("not among");
     expect(adj(fs).alertLevel).toBe("warn");
+  });
+});
+
+describe("refineAnomaly — Jev overlay, heuristic fallback", () => {
+  const stub =
+    (over: Partial<AnomalyDecision>, conf = 0.9): ClassifyAnomaly =>
+    async () => ({
+      severity: "low",
+      confidence: conf,
+      likelyExploit: 0.1,
+      probabilities: {},
+      inputTokens: 12,
+      ...over,
+    });
+
+  test("high-confidence Jev overrides passthrough severity", async () => {
+    const heuristic = triageFindings(ctx({}));
+    expect(heuristic.find((f) => f.class === "info")?.severity).toBe("medium");
+    const fs = await refineAnomaly(
+      ctx({}),
+      heuristic,
+      stub({ severity: "high", confidence: 0.91 }),
+    );
+    const info = fs.find((f) => f.class === "info");
+    expect(info?.severity).toBe("high");
+    expect(info?.confidence).toBe(0.91);
+    expect(info?.recommendedAction).toContain("Jev: high");
+    expect(adj(fs).alertLevel).toBe("warn");
+  });
+
+  test("below confidence floor → keep heuristic, annotate abstain", async () => {
+    const heuristic = triageFindings(ctx({}));
+    const fs = await refineAnomaly(
+      ctx({}),
+      heuristic,
+      stub({ severity: "critical", confidence: 0.4 }),
+    );
+    const info = fs.find((f) => f.class === "info");
+    expect(info?.severity).toBe("medium");
+    expect(info?.recommendedAction).toContain("Jev abstained");
+    expect(info?.recommendedAction).toContain("said critical");
+  });
+
+  test("classify null → unchanged (no network / mock / failure)", async () => {
+    const heuristic = triageFindings(ctx({}));
+    const fs = await refineAnomaly(ctx({}), heuristic, async () => null);
+    expect(fs).toEqual(heuristic);
+  });
+
+  test("does not touch signature-match (class:bug) findings", async () => {
+    const c = ctx({
+      config: config({
+        signatures: [{ title: "priv fn", fn: "socialize-debt", asset: "stx", severity: "high" }],
+      }),
+    });
+    const heuristic = triageFindings(c);
+    const fs = await refineAnomaly(c, heuristic, stub({ severity: "info", confidence: 0.99 }));
+    const bug = fs.find((f) => f.class === "bug");
+    expect(bug?.severity).toBe("high");
+    expect(bug?.confidence).toBe(0.6);
+    expect(bug?.recommendedAction).not.toContain("Jev:");
   });
 });

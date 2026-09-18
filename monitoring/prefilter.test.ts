@@ -7,6 +7,7 @@ import type { SensitiveFn } from "./config";
 import {
   type ChainEventBody,
   classify,
+  classifyMaybe,
   decodeArgs,
   firstContractPrincipal,
   firstUint,
@@ -118,5 +119,53 @@ describe("counterparty.new — known-vs-new", () => {
 
   test("new/unknown counterparty — notable", () => {
     expect(classify(swap, { sender: ATTACKER }).notable).toBe(true);
+  });
+});
+
+describe("classifyMaybe — Jev on fail-safes only", () => {
+  const noThreshold: SensitiveFn = {
+    name: "withdraw-ft",
+    triggerClass: "transfer.outflow",
+    callerAllowlist: [],
+  };
+  const gated: SensitiveFn = {
+    name: "withdraw-stx",
+    triggerClass: "transfer.outflow",
+    callerAllowlist: [],
+    outflowThreshold: { asset: "stx", amount: "1000000000000" },
+  };
+  const ev: ChainEventBody = { sender: DAO, function_args: args(Cl.uint(1n)) };
+
+  test("high-conf benign drops a fail-safe", async () => {
+    const v = await classifyMaybe(noThreshold, ev, async () => ({
+      notable: false,
+      confidence: 0.92,
+      inputTokens: 5,
+    }));
+    expect(v.notable).toBe(false);
+    expect(v.reason).toContain("Jev benign");
+  });
+
+  test("low-conf benign keeps the fail-safe", async () => {
+    const v = await classifyMaybe(noThreshold, ev, async () => ({
+      notable: false,
+      confidence: 0.5,
+      inputTokens: 5,
+    }));
+    expect(v.notable).toBe(true);
+  });
+
+  test("threshold-benign is never sent to Jev (stays benign)", async () => {
+    let called = 0;
+    const v = await classifyMaybe(
+      gated,
+      { sender: DAO, function_args: args(Cl.uint(1n)) },
+      async () => {
+        called += 1;
+        return { notable: true, confidence: 0.99, inputTokens: 5 };
+      },
+    );
+    expect(called).toBe(0);
+    expect(v.notable).toBe(false);
   });
 });

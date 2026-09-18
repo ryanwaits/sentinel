@@ -3,13 +3,20 @@
  *
  * The Type-2 counterpart to audit-pipeline.ts. A transfer.outflow / counterparty.new event hits
  * already-deployed bytecode, so re-auditing yields nothing new. Instead we CORRELATE the event against
- * what the audit already taught us (the KB `signatures`) + the prefilter verdict, deterministically —
- * no model, no spend — and route a human-gated DETECTION alert. Reuses the Finding/Adjudication shape
- * so notify is unchanged; triage findings carry `origin:"incident"` and a correlation-confidence
+ * what the audit already taught us (the KB `signatures`) + the prefilter verdict — signature-match
+ * stays deterministic; the generic anomaly's severity may be refined by Jev (confidence-gated,
+ * heuristic fallback) — and route a human-gated DETECTION alert. Reuses the Finding/Adjudication
+ * shape so notify is unchanged; triage findings carry `origin:"incident"` and a correlation-confidence
  * (NEVER a confirmed exploit — by the time the webhook fires, the tx is already on-chain).
  */
-import { adjudicateFindings, type Finding } from "./adjudication";
+import { adjudicateFindings, type Finding, resolveWaivers } from "./adjudication";
 import type { MonitoringConfig } from "./config";
+import {
+  type AnomalyState,
+  type ClassifyAnomaly,
+  classifyAnomaly,
+  jevConfidenceFloor,
+} from "./jev";
 import { notify } from "./notify";
 import type { ChainEventBody, PrefilterVerdict } from "./prefilter";
 import { recordSession } from "./trigger-state";
@@ -124,16 +131,84 @@ export function triageFindings(ctx: TriageContext): Finding[] {
   return out;
 }
 
-/** Run one Type-2 triage end-to-end: deterministic findings → adjudicate → notify → ledger. */
+function anomalyState(ctx: TriageContext, info: Finding): AnomalyState {
+  const asset = eventAsset(ctx.event);
+  const bl = asset != null ? ctx.config.outflowBaselines.find((b) => b.asset === asset) : undefined;
+  return {
+    contractId: ctx.contractId,
+    triggerClass: ctx.triggerClass,
+    event: {
+      type: ctx.event.type,
+      amount: ctx.event.amount,
+      recipient: ctx.event.recipient,
+      asset,
+      function_name: ctx.event.function_name,
+      sender: ctx.event.sender,
+    },
+    verdict: {
+      reason: ctx.verdict.reason,
+      suspicious: ctx.verdict.suspicious,
+      amount: ctx.verdict.amount != null ? ctx.verdict.amount.toString() : null,
+    },
+    baseline: bl
+      ? {
+          asset: bl.asset,
+          count: bl.count,
+          p99: bl.p99,
+          max: bl.max,
+          recipients: bl.recipients,
+        }
+      : null,
+    heuristic: { severity: info.severity, confidence: info.confidence ?? 0.4 },
+  };
+}
+
+/**
+ * Overlay Jev on the generic (class:info) passthrough finding. Signature-match findings stay
+ * heuristic. High-confidence Jev replaces severity/confidence; below the floor (or any failure)
+ * keeps the heuristic and annotates recommendedAction.
+ */
+export async function refineAnomaly(
+  ctx: TriageContext,
+  findings: Finding[],
+  classify: ClassifyAnomaly = classifyAnomaly,
+): Promise<Finding[]> {
+  const infoIdx = findings.findIndex((f) => f.class === "info" && f.origin === "incident");
+  if (infoIdx < 0) return findings;
+  const info = findings[infoIdx];
+  if (!info) return findings;
+  const decision = await classify(anomalyState(ctx, info));
+  if (!decision) return findings;
+  const floor = jevConfidenceFloor();
+  const used = decision.confidence >= floor;
+  console.log(
+    `[jev] ${ctx.contractId} ${decision.severity} conf=${decision.confidence.toFixed(2)} exploit-p=${decision.likelyExploit.toFixed(2)} tokens=${decision.inputTokens}${used ? "" : " (abstain)"}`,
+  );
+  const tag = used
+    ? ` Jev: ${decision.severity} (conf ${decision.confidence.toFixed(2)}, exploit-p ${decision.likelyExploit.toFixed(2)}).`
+    : ` Jev abstained (conf ${decision.confidence.toFixed(2)} < ${floor}, said ${decision.severity}).`;
+  return findings.map((f, i) =>
+    i !== infoIdx
+      ? f
+      : {
+          ...f,
+          ...(used ? { severity: decision.severity, confidence: decision.confidence } : {}),
+          recommendedAction: `${f.recommendedAction ?? ""}${tag}`,
+        },
+  );
+}
+
+/** Run one Type-2 triage end-to-end: findings → (optional Jev refine) → adjudicate → notify → ledger. */
 export async function triageTrigger(ctx: TriageContext): Promise<void> {
-  const findings = triageFindings(ctx);
+  const findings = await refineAnomaly(ctx, triageFindings(ctx));
   const sessionId = `incident:${ctx.txId ?? "no-tx"}:${ctx.contractId}:${ctx.fnLabel}`;
   const adjudication = adjudicateFindings({
     sessionId,
     contractId: ctx.contractId,
     findings,
-    tokenCostUsd: 0, // deterministic — no model spend
+    tokenCostUsd: 0, // Type-2: no audit spend (Jev pennies ignored)
     waivers: ctx.config.waivers,
+    waived: await resolveWaivers(findings, ctx.config.waivers),
   });
   await notify(adjudication);
   recordSession({
