@@ -19,6 +19,9 @@ simnet/history.json
 # sentinel durable run sink (M0 spike; M2 swaps for external KV)
 .sentinel/
 
+# leftover live-KB path (watches now live in .sentinel/kb/; examples in sentinel/examples/kb/)
+sentinel/kb/
+
 # account-personal project binding
 .secondlayer/
 

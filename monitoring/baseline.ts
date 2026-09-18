@@ -127,7 +127,7 @@ if (import.meta.main) {
       `asset ${b.asset} | n=${b.count} recipients=${b.distinctRecipients} | p50=${b.p50} p95=${b.p95} p99=${b.p99} max=${b.max}`,
     );
     console.log(
-      `  → suggestedOutflowThreshold: { "asset": "${b.asset}", "amount": "${b.suggestedAmount}" }   (review + promote into sentinel/kb/)`,
+      `  → suggestedOutflowThreshold: { "asset": "${b.asset}", "amount": "${b.suggestedAmount}" }   (review + promote into KB_DIR)`,
     );
   }
   if (write) {
@@ -140,7 +140,7 @@ if (import.meta.main) {
     rec.outflowBaselines = baselines.map((b) => toOutflowBaseline(b, computedAt));
     saveRecord(rec);
     console.log(
-      `\nwrote ${rec.outflowBaselines.length} baseline(s) → sentinel/kb/${contractId}.json (reference data for anomaly severity; live outflowThreshold still human-promoted).`,
+      `\nwrote ${rec.outflowBaselines.length} baseline(s) → KB_DIR/${contractId}.json (reference data for anomaly severity; live outflowThreshold still human-promoted).`,
     );
   }
 }

@@ -45,8 +45,9 @@ Verify the gate: an unsigned `POST <PUBLIC>/webhook/<ruleKey>` must return **401
 ## 4. Provision a live secondlayer chain subscription (you run)
 Point a subscription at `<PUBLIC>/webhook/<ruleKey>` with the signing secret from §3, filtered to the
 watched contract's sensitive fns (the M2 provisioner / `sl` CLI — needs `SECONDLAYER_API_KEY`). The
-watched contract must have a live KB record under `sentinel/kb/` (else the bridge returns 204
-"unmonitored"). Seed one with `bun run distill <contractId> <client>` → review → move into `sentinel/kb/`.
+watched contract must have a live KB record in `.sentinel/kb/` (else the bridge returns 204
+"unmonitored"). Seed one with `bun run distill <contractId> <client>` → review → `saveRecord` into
+`.sentinel/kb/`. Playground fixtures: `bun run examples:load`.
 
 ## 5. Fire it
 A real on-chain event on a watched fn (or a synthetic signed webhook) → bridge verifies → pre-filters →
